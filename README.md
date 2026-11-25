@@ -53,6 +53,17 @@ Copy `.env.example` to `.env` to go live:
 
 If you build with `VITE_APP_TOKEN`, that token is readable by anyone who unpacks the `.ehpk`. Treat it as a low-value shared secret and keep real credentials (Telegram, LLM, calendar) on the server only.
 
+## Hosting the backend
+
+The backend has no dependencies, so any host that runs Node or Docker works. The repo includes a `Dockerfile` and a `render.yaml` for Render.
+
+1. On Render, choose New, then Blueprint, and select this repo. It creates a web service with a 1 GB disk at `/data` for the reminder and pairing store, and generates an `APP_TOKEN`.
+2. Fill in `TELEGRAM_BOT_TOKEN`, `LLM_API_KEY` and `STT_API_KEY` when asked. The model and speech settings are already in the blueprint.
+3. Stop any local backend first. Telegram lets only one program read a bot's messages.
+4. Build the glasses app with the host address and token: `VITE_API_BASE=https://<service>.onrender.com VITE_APP_TOKEN=<token> npm run pack`.
+
+A free plan sleeps when idle, which stops Telegram polling and reminders, so the blueprint uses the always-on Starter plan. The container was not run in Docker here; the same environment was checked locally with the token, host and store path set.
+
 ## Design notes
 
 - `app/src/machine.ts` is a pure state machine (screen + input in, screen + effects out). `runtime.ts` runs the effects against the SDK and the API. Results from a cancelled step are discarded, so a late response never changes the screen.

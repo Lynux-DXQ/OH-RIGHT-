@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: oh-right-backend
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: oh-right-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: STORE_FILE
+        value: /data/store.json
+      - key: LLM_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: LLM_MODEL
+        value: openai/gpt-4o-mini
+      - key: STT_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: STT_MODEL
+        value: whisper-large-v3-turbo
+      - key: APP_TOKEN
+        generateValue: true
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: STT_API_KEY
+        sync: false
