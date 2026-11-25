@@ -3,8 +3,8 @@ export type Purpose = 'any' | 'reminder' | 'editReminder' | 'editDraft';
 export type Reminder = { title: string; whenISO: string; whenLabel: string };
 export type EventCard = { title: string; whenLabel: string; startsInLabel: string; where: string; attendees: string; prep: string };
 export type Thread = { id: string; name: string; unread: number; summary: string };
-export type Draft = { threadId: string; name: string; summary: string; text: string };
-export type Alert = { threadId: string; name: string; from: string; text: string };
+export type Draft = { threadId: string; name: string; summary: string; text: string; alts?: string[] };
+export type Alert = { kind: 'message'; threadId: string; name: string; from: string; text: string } | { kind: 'reminder'; id: string; title: string };
 export type Intent = { type: 'reminder'; reminder: Reminder } | { type: 'next' } | { type: 'reply' } | { type: 'unknown' };
 
 export type Screen =
@@ -20,7 +20,7 @@ export type Screen =
   | { t: 'done'; title: string; detail: string }
   | { t: 'error'; msg: string; retry: Effect | null; sel: number };
 
-export type State = { screen: Screen };
+export type State = { screen: Screen; unread?: number };
 
 export type Effect =
   | { e: 'rec:start' }
@@ -28,6 +28,7 @@ export type Effect =
   | { e: 'rec:cancel' }
   | { e: 'parse'; text: string }
   | { e: 'save'; r: Reminder }
+  | { e: 'snooze'; id: string; minutes: number }
   | { e: 'fetchNext' }
   | { e: 'fetchThreads' }
   | { e: 'draft'; thread: Thread; instruction?: string; previous?: string; items: Thread[] }
@@ -41,6 +42,7 @@ export type Input =
   | { k: 'event'; ev: EventCard | null }
   | { k: 'alert'; a: Alert }
   | { k: 'alertExpire' }
+  | { k: 'unread'; n: number }
   | { k: 'threads'; items: Thread[] }
   | { k: 'drafted'; d: Draft; items: Thread[] }
   | { k: 'saved'; r: Reminder }
@@ -49,8 +51,10 @@ export type Input =
   | { k: 'fail'; msg: string; retry: Effect | null };
 
 export const HOME_ITEMS = ['Remember something', 'What is next?', 'Reply to a chat'];
+const REMINDER_INTERRUPTIBLE = ['home', 'done', 'meeting', 'error', 'prompt'];
+export const SNOOZE_MINUTES = 10;
 export const REMINDER_OPTIONS = ['Save', 'Change', 'Cancel'];
-export const DRAFT_OPTIONS = ['Send', 'Change', 'Cancel'];
+export const draftOptions = (d: Draft) => (d.alts?.length ? ['Send', 'Change', 'Other reply', 'Cancel'] : ['Send', 'Change', 'Cancel']);
 
 const TAP_GUARD_MS = 700;
 
@@ -69,11 +73,21 @@ function purposeFor(s: Screen): Purpose {
 }
 
 export function reduce(state: State, input: Input): R {
+  if (input.k === 'unread') return state.unread === input.n ? { state, effects: [] } : { state: { ...state, unread: input.n }, effects: [] };
+  const r = step(state, input);
+  if (r.state === state || state.unread === undefined) return r;
+  return { state: { ...r.state, unread: state.unread }, effects: r.effects };
+}
+
+function step(state: State, input: Input): R {
   const s = state.screen;
   const stay: R = { state, effects: [] };
 
   if (input.k === 'fail') return to({ t: 'error', msg: input.msg, retry: input.retry, sel: 0 });
-  if (input.k === 'alert') return s.t === 'home' ? to({ t: 'alert', a: input.a }) : stay;
+  if (input.k === 'alert') {
+    const ok = input.a.kind === 'reminder' ? REMINDER_INTERRUPTIBLE.includes(s.t) : s.t === 'home';
+    return ok ? to({ t: 'alert', a: input.a }) : stay;
+  }
   if (input.k === 'alertExpire') return s.t === 'alert' ? to(HOME) : stay;
 
   if (s.t === 'busy') {
@@ -141,11 +155,15 @@ export function reduce(state: State, input: Input): R {
       return stay;
 
     case 'draft':
-      if (input.k === 'up' || input.k === 'down') return to({ ...s, sel: wrap(s.sel, DRAFT_OPTIONS.length, input.k === 'down' ? 1 : -1) });
+      if (input.k === 'up' || input.k === 'down') return to({ ...s, sel: wrap(s.sel, draftOptions(s.d).length, input.k === 'down' ? 1 : -1) });
       if (input.k === 'double') return to({ t: 'threads', items: s.items, idx: Math.max(0, s.items.findIndex((x) => x.id === s.d.threadId)) });
       if (input.k === 'click') {
         if (s.sel === 0) return to({ t: 'busy', label: 'Sending', purpose: 'any', back: HOME }, { e: 'send', d: s.d, items: s.items });
         if (s.sel === 1) return to({ t: 'listening', purpose: 'editDraft', via: 'click', since: input.at, back: s }, { e: 'rec:start' });
+        if (s.sel === 2 && s.d.alts?.length) {
+          const [next, ...rest] = s.d.alts;
+          return to({ ...s, d: { ...s.d, text: next, alts: [...rest, s.d.text] } });
+        }
         return to({ t: 'threads', items: s.items, idx: Math.max(0, s.items.findIndex((x) => x.id === s.d.threadId)) });
       }
       return stay;
@@ -160,6 +178,11 @@ export function reduce(state: State, input: Input): R {
       return stay;
 
     case 'alert':
+      if (s.a.kind === 'reminder') {
+        if (input.k === 'double') return to(HOME, { e: 'snooze', id: s.a.id, minutes: SNOOZE_MINUTES });
+        if (input.k === 'click') return to(HOME);
+        return stay;
+      }
       if (input.k === 'double') return to(HOME);
       if (input.k === 'click') {
         const thread = { id: s.a.threadId, name: s.a.name, unread: 1, summary: '' };
@@ -194,6 +217,11 @@ export function onTranscript(state: State, text: string): R {
     const { d, items } = s.back;
     const thread = items.find((x) => x.id === d.threadId);
     if (thread) return { state, effects: [{ e: 'draft', thread, instruction: clean, previous: d.text, items }] };
+  }
+  if (s.purpose === 'editReminder' && s.back.t === 'reminder' && !/remind/i.test(clean)) {
+    const bit = clean.replace(/^(please\s+)?(make it|change (it )?to|set (it )?to|actually|move it to)\s+/i, '');
+    const text = /^(at\s+)?\d|^(at|in|tomorrow|tonight|today|next|on|this)\b/i.test(bit) ? 'remind me to ' + s.back.r.title + ' ' + (/^\d/.test(bit) ? 'at ' : '') + bit : 'remind me to ' + bit + ' ' + s.back.r.whenLabel;
+    return { state, effects: [{ e: 'parse', text }] };
   }
   return { state, effects: [{ e: 'parse', text: clean }] };
 }

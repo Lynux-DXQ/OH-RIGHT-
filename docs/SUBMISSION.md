@@ -72,3 +72,31 @@ The demo video uses sample calendar and chat data, and typed commands stand in f
 3. **Telegram Bot API: bots cannot read a user's existing chats.** A bot only sees messages sent to it or to groups it is in, and groups need privacy mode switched off. A read-only option for chats the user chooses would allow a true "reply to my chats" experience.
 4. **Google sign-in does not work inside the WebView.** Reading a live Google Calendar needs OAuth, so I used a private iCal link, which does not expand recurring events. A pairing-code sign-in flow for WebView apps would allow proper calendar access.
 5. **Even Hub simulator: no way to inject microphone audio.** It only reads a live microphone. An endpoint that accepts audio would let developers test voice flows automatically.
+
+
+## Who it is for, and what they reach for
+
+- **Daily users:** people whose day is mostly messages and meetings and who cannot always look at a phone: founders, managers, parents, clinicians, anyone commuting or cooking with hands full.
+- **Habit ranking:** Send it (reply to a chat by voice) is the daily habit, because messages arrive all day. Catch it (remember something) is the second most used. Prep it (what is next) is a quick glance several times a day. The home screen shows "(N new)" so the reply path is one tap away.
+- **Who would pay:** busy professionals paying a small monthly fee for hands-free replies and reminders that actually reach them. The replies feature is the paid hero; reminders and prep are the free hook.
+
+## Replies come from you, not the bot
+
+A plain bot can only send as itself and only sees chats it was added to. Oh, Right supports Telegram Business mode: connect the bot under Telegram Settings > Business > Chatbots (needs Telegram Premium), and it then sees your private chats and sends replies as you, still only after you confirm on the glasses. Without Business mode it falls back to sending as the bot. `/status` shows which mode is active.
+
+Status: covered by unit tests; not yet tried live, because it needs a Premium account.
+
+## Reminders on the lens
+
+A reminder that comes due appears on the glasses at that moment as a "Reminder" card, even when the Telegram ping is off. Tap to dismiss, double tap to snooze 10 minutes.
+
+## New in this version
+
+- **Other reply:** each draft comes with two alternatives with a different intent (for example one that defers). Pick "Other reply" to cycle them with one tap, no dictation.
+- **Voice notes and threaded replies:** Telegram voice notes are transcribed and shown on the lens as "[Voice note] ...", so you can read them without a speaker. Replies are sent as a threaded reply to the last message.
+- **Safer Business mode:** only the paired owner's account can connect, a revoked connection drops its chats, and replies are blocked if Telegram reports no permission to reply.
+- **Fixes from an independent review:** spoken reminder edits like "make it 7 pm" keep the title, a stale alert timer can no longer dismiss a newer alert, and the demo inbox no longer empties after one send.
+
+## Independent review
+
+Two different AI models reviewed the code and researched the competition. Known limits they raised and that remain: no real G2 hardware test; Business mode and live calendar are untested live; the calendar reader ignores recurring events and time zones; the confirmation card truncates very long drafts (drafts are capped at 110 characters to keep them on screen).

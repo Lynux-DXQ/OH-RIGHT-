@@ -129,15 +129,30 @@ const routes = {
 
   'POST /api/alerts': async (req) => {
     const since = Number((await readJson(req)).since) || 0;
-    if (!telegramEnabled()) return { alerts: [] };
-    const alerts = allThreads()
-      .filter((t) => t.unread > 0 && t.messages.at(-1).at > since)
-      .map((t) => {
-        const m = t.messages.at(-1);
-        return { threadId: t.id, name: t.name.slice(0, 28), from: String(m.from).slice(0, 28), text: String(m.text).slice(0, 160), at: m.at };
-      })
-      .sort((a, b) => a.at - b.at);
-    return { alerts };
+    const threads = allThreads();
+    const unread = threads.filter((t) => t.unread > 0).length;
+    const messages = telegramEnabled()
+      ? threads
+        .filter((t) => t.unread > 0 && t.messages.at(-1).at > since)
+        .map((t) => {
+          const m = t.messages.at(-1);
+          return { kind: 'message', threadId: t.id, name: t.name.slice(0, 28), from: String(m.from).slice(0, 28), text: String(m.text).slice(0, 160), at: m.at };
+        })
+      : [];
+    const reminders = store.data.glassesQueue.filter((q) => q.at > since).map((q) => ({ kind: 'reminder', id: q.id, title: q.title, at: q.at }));
+    return { alerts: [...reminders, ...messages].sort((a, b) => a.at - b.at), unread };
+  },
+
+  'POST /api/snooze': async (req) => {
+    const body = await readJson(req);
+    const minutes = Math.min(120, Math.max(1, Number(body.minutes) || 10));
+    const r = store.data.reminders.find((x) => x.id === String(body.id));
+    if (!r) throw new HttpError(404, 'That reminder no longer exists');
+    const id = r.id.split('~s')[0] + '~s' + Date.now();
+    store.data.reminders.push({ id, title: r.title, dueAt: Date.now() + minutes * 60000, attempts: 0, delivered: false, failed: false });
+    store.data.glassesQueue = store.data.glassesQueue.filter((q) => q.id !== r.id);
+    store.save();
+    return { snoozed: true, minutes };
   },
 
   'POST /api/draft': async (req) => {
@@ -145,7 +160,7 @@ const routes = {
     const t = allThreads().find((x) => x.id === String(body.threadId));
     if (!t) throw new HttpError(404, 'That conversation is no longer available');
     const out = await draftReply(t, body.instruction, body.previousDraft);
-    return { threadId: t.id, name: t.name.slice(0, 28), summary: out.summary, text: out.text };
+    return { threadId: t.id, name: t.name.slice(0, 28), summary: out.summary, text: out.text, alts: out.alts };
   },
 
   'POST /api/send': async (req) => {
@@ -158,11 +173,12 @@ const routes = {
     const t = allThreads().find((x) => x.id === String(body.threadId));
     if (!t) throw new HttpError(404, 'That conversation is no longer available');
     const job = (async () => {
-      await sendTelegram(t.id, text);
+      if (t.via && store.data.businessConnections[t.via]?.canReply === false) throw new HttpError(400, 'Telegram Business has no permission to reply in this chat');
+      await sendTelegram(t.id, text, t.via, t.replyTo);
       if (telegramEnabled()) markRead(t.id);
       else {
         const demo = demoState.find((x) => x.id === t.id);
-        if (demo) demo.messages = [];
+        if (demo) demo.unread = 0;
       }
       return { sent: true, name: t.name };
     })();
@@ -227,6 +243,12 @@ async function deliverBatch() {
   const now = Date.now();
   for (const r of store.data.reminders) {
     if (r.delivered || r.failed || r.dueAt > now) continue;
+    if (!r.queued) {
+      r.queued = true;
+      store.data.glassesQueue.push({ id: r.id, title: r.title, at: now });
+      store.data.glassesQueue = store.data.glassesQueue.slice(-20);
+      store.save();
+    }
     const chat = store.data.ownerChatId || (telegramEnabled() ? null : 'demo');
     if (!chat) continue;
     try {

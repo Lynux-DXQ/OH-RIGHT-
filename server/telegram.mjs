@@ -1,4 +1,5 @@
 import { store } from './store.mjs';
+import { sttEnabled, transcribe } from './llm.mjs';
 
 const TOKEN = () => process.env.TELEGRAM_BOT_TOKEN || '';
 const TTL_MS = 60 * 60 * 1000;
@@ -24,7 +25,14 @@ async function api(method, body, timeoutMs = 15000) {
   return json.result;
 }
 
-export async function sendTelegram(chatId, text) {
+export const sendBody = (chatId, text, via, replyTo) => ({
+  chat_id: chatId,
+  text: String(text).slice(0, 4000),
+  ...(via ? { business_connection_id: via } : {}),
+  ...(replyTo ? { reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } } : {}),
+});
+
+export async function sendTelegram(chatId, text, via, replyTo) {
   if (!telegramEnabled()) {
     store.data.outbox.push({ at: new Date().toISOString(), chatId, text, demo: true });
     store.data.outbox = store.data.outbox.slice(-50);
@@ -32,7 +40,7 @@ export async function sendTelegram(chatId, text) {
     console.log('[demo telegram -> ' + chatId + '] ' + text.length + ' characters');
     return { demo: true };
   }
-  await api('sendMessage', { chat_id: chatId, text: text.slice(0, 4000) });
+  await api('sendMessage', sendBody(chatId, text, via, replyTo));
   return { demo: false };
 }
 
@@ -58,6 +66,7 @@ function ownerCommand(chatId, text) {
       return say([
         'Paired: yes',
         'Pings for new messages: ' + (s.notify ? (muted() ? 'on, muted for ' + Math.ceil((s.muteUntil - Date.now()) / 60000) + ' more min' : 'on') : 'off'),
+        'Sending replies as: ' + (Object.keys(store.data.businessConnections).length ? 'you (Business mode)' : 'the bot'),
         'Chats waiting: ' + recentThreads().filter((t) => t.unread).length,
         'Reminders pending: ' + due,
       ].join('\n'));
@@ -96,6 +105,23 @@ function maybeNotify(t, from, text) {
   sendTelegram(owner, '💬 ' + t.name.slice(0, 40) + '\n' + from.slice(0, 30) + ': ' + text.slice(0, 200) + '\n\nReply from your glasses, or /mute 60 to pause pings.').catch((err) => console.error('[telegram] ping failed:', err.message));
 }
 
+function ingestBusinessConnection(c) {
+  if (!c?.id) return;
+  const conns = store.data.businessConnections;
+  const owner = store.data.ownerChatId;
+  const userChatId = String(c.user_chat_id ?? c.user?.id ?? '');
+  if (owner && userChatId !== owner) {
+    console.log('[telegram] ignored a business connection from an account that is not the paired owner');
+    return;
+  }
+  if (c.is_enabled === false) {
+    delete conns[c.id];
+    for (const [id, th] of threads) if (th.via === c.id) threads.delete(id);
+  } else conns[c.id] = { userChatId, canReply: (c.rights?.can_reply ?? c.can_reply) !== false };
+  store.save();
+  if (owner) sendTelegram(owner, c.is_enabled === false ? 'Business mode disconnected. Replies will come from the bot again.' : 'Business mode connected. I can now see your chats and send replies as you, only when you tap Send on your glasses.').catch(() => {});
+}
+
 function ingest(msg) {
   if (!msg?.chat || typeof msg.text !== 'string') {
     if (msg?.chat) console.log('[telegram] ignored a non-text message from chat ' + msg.chat.id);
@@ -103,6 +129,16 @@ function ingest(msg) {
   }
   const chatId = String(msg.chat.id);
   const owner = store.data.ownerChatId;
+  const via = msg.business_connection_id ? String(msg.business_connection_id) : '';
+  if (via) {
+    const conn = store.data.businessConnections[via];
+    if (!conn) return;
+    if (msg.from && String(msg.from.id) === conn.userChatId) {
+      const mine = threads.get(chatId);
+      if (mine) mine.unread = 0;
+      return;
+    }
+  }
 
   if (msg.chat.type === 'private' && /^\/start\b/.test(msg.text)) {
     if (owner && owner !== chatId) {
@@ -121,7 +157,7 @@ function ingest(msg) {
     return;
   }
 
-  if (chatId === owner) {
+  if (!via && chatId === owner) {
     if (msg.chat.type === 'private' && msg.text.startsWith('/')) {
       ownerCommand(chatId, msg.text);
       return;
@@ -139,6 +175,8 @@ function ingest(msg) {
   const from = msg.from ? [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || msg.from.username || 'Someone' : 'Someone';
   const t = threads.get(chatId) || { id: chatId, name, messages: [], unread: 0 };
   t.name = name;
+  t.via = via;
+  if (msg.message_id) t.replyTo = msg.message_id;
   t.messages.push({ from, text: msg.text.slice(0, 600), at: (msg.date || Date.now() / 1000) * 1000 });
   t.messages = t.messages.slice(-12);
   t.unread += 1;
@@ -146,6 +184,24 @@ function ingest(msg) {
   console.log('[telegram] new message in chat ' + chatId + ' (' + t.messages.length + ' held)');
   maybeNotify(t, from, msg.text);
   if (threads.size > 50) threads.delete(recentThreads().at(-1).id);
+}
+
+export async function handleMessage(msg) {
+  const media = msg?.voice || msg?.audio;
+  if (!msg?.chat || typeof msg.text === 'string' || !media) return ingest(msg);
+  let text = '[Voice note, not transcribed]';
+  if (sttEnabled() && media.file_size <= 2_000_000 && (media.duration || 0) <= 90) {
+    try {
+      const file = await api('getFile', { file_id: media.file_id });
+      const res = await fetch('https://api.telegram.org/file/bot' + TOKEN() + '/' + file.file_path, { signal: AbortSignal.timeout(20000) });
+      if (!res.ok) throw new Error('download ' + res.status);
+      const heard = await transcribe(Buffer.from(await res.arrayBuffer()), { type: media.mime_type || 'audio/ogg', name: 'voice.ogg' });
+      if (heard) text = '[Voice note] ' + heard;
+    } catch (err) {
+      console.error('[telegram] voice note failed:', err.message);
+    }
+  }
+  ingest({ ...msg, text });
 }
 
 export function recentThreads(now = Date.now()) {
@@ -174,10 +230,11 @@ export async function startPolling() {
   ] }).catch(() => {});
   while (running) {
     try {
-      const updates = await api('getUpdates', { offset, timeout: 25, allowed_updates: ['message'] }, 35000);
+      const updates = await api('getUpdates', { offset, timeout: 25, allowed_updates: ['message', 'business_connection', 'business_message'] }, 35000);
       for (const u of updates) {
         offset = u.update_id + 1;
-        ingest(u.message);
+        if (u.business_connection) ingestBusinessConnection(u.business_connection);
+        await handleMessage(u.message || u.business_message);
       }
     } catch (err) {
       console.error('[telegram] poll error:', err.message);
@@ -186,4 +243,5 @@ export async function startPolling() {
   }
 }
 
-export const _ingestForTests = ingest;
+export const _ingestForTests = (m) => (m?.business_connection ? ingestBusinessConnection(m.business_connection) : ingest(m));
+export const _handleForTests = handleMessage;

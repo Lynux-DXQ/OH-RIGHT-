@@ -55,25 +55,31 @@ export class Runtime {
 
   async checkAlerts() {
     try {
-      const { alerts } = await api.alerts(this.alertSince);
+      const { alerts, unread } = await api.alerts(this.alertSince);
+      this.dispatch({ k: 'unread', n: unread });
       for (const a of alerts) {
         this.alertSince = Math.max(this.alertSince, a.at);
-        this.pendingAlerts = [...this.pendingAlerts.filter((p) => p.threadId !== a.threadId), a];
+        const same = (p: Alert) => (p.kind === 'message' && a.kind === 'message' ? p.threadId === a.threadId : false);
+        this.pendingAlerts = [...this.pendingAlerts.filter((p) => !same(p)), a].sort((x, y) => Number(y.kind === 'reminder') - Number(x.kind === 'reminder'));
       }
     } catch {
       return;
     }
     const next = this.pendingAlerts[0];
-    if (!next || this.state.screen.t !== 'home') return;
-    this.pendingAlerts.shift();
+    if (!next) return;
     this.dispatch({ k: 'alert', a: next });
+    if (this.state.screen.t !== 'alert') return;
+    this.pendingAlerts.shift();
     if (this.expireTimer) clearTimeout(this.expireTimer);
-    this.expireTimer = setTimeout(() => this.dispatch({ k: 'alertExpire' }), 25000);
+    this.expireTimer = setTimeout(() => {
+      const cur = this.state.screen;
+      if (cur.t === 'alert' && cur.a === next) this.dispatch({ k: 'alertExpire' });
+    }, next.kind === 'reminder' ? 90000 : 25000);
   }
 
   subscribe(fn: Listener) {
     this.listeners.add(fn);
-    fn(render(this.state.screen), this.state, this.inGlasses);
+    fn(render(this.state.screen, this.state.unread), this.state, this.inGlasses);
     return () => this.listeners.delete(fn);
   }
 
@@ -192,6 +198,9 @@ export class Runtime {
           this.ids.delete(saveKey);
           return this.settle(epoch, { k: 'saved', r: e.r });
         }
+        case 'snooze':
+          await api.snooze(e.id, e.minutes).catch(() => undefined);
+          return;
         case 'fetchNext': {
           const { event } = await api.next();
           return this.settle(epoch, { k: 'event', ev: event });
@@ -242,7 +251,7 @@ export class Runtime {
   }
 
   private paint() {
-    const layout = render(this.state.screen);
+    const layout = render(this.state.screen, this.state.unread);
     for (const fn of this.listeners) fn(layout, this.state, this.inGlasses);
     if (!this.bridge) return;
     if (this.lastLayout && JSON.stringify(this.lastLayout) === JSON.stringify(layout)) return;

@@ -110,7 +110,7 @@ describe('backend in demo mode', () => {
 
 describe('push alert feed', () => {
   it('is empty in demo mode and reports only new unread messages when Telegram is on', async () => {
-    expect(await (await post('/api/alerts', { since: 0 })).json()).toEqual({ alerts: [] });
+    expect((await (await post('/api/alerts', { since: Date.now() })).json()).alerts).toEqual([]);
     process.env.TELEGRAM_BOT_TOKEN = 'test-token';
     try {
       // @ts-expect-error plain JS module
@@ -118,11 +118,72 @@ describe('push alert feed', () => {
       const at = Date.now();
       _ingestForTests({ chat: { id: -900, type: 'group', title: 'Alert group' }, from: { first_name: 'Ada' }, text: 'Can you confirm the time?', date: at / 1000 });
       const first = await (await post('/api/alerts', { since: at - 1000 })).json();
+      first.alerts = first.alerts.filter((x: { kind: string }) => x.kind === 'message');
       expect(first.alerts).toHaveLength(1);
-      expect(first.alerts[0]).toMatchObject({ threadId: '-900', name: 'Alert group', from: 'Ada', text: 'Can you confirm the time?' });
-      expect((await (await post('/api/alerts', { since: first.alerts[0].at })).json()).alerts).toEqual([]);
+      expect(first.alerts[0]).toMatchObject({ kind: 'message', threadId: '-900', name: 'Alert group', from: 'Ada', text: 'Can you confirm the time?' });
+      expect((await (await post('/api/alerts', { since: first.alerts[0].at })).json()).alerts.filter((x: { kind: string }) => x.kind === 'message')).toEqual([]);
     } finally {
       delete process.env.TELEGRAM_BOT_TOKEN;
+    }
+  });
+});
+
+describe('reminder alerts and snooze', () => {
+  it('queues due reminders for the glasses and snoozes them', async () => {
+    const res = await (await post('/api/alerts', { since: 0 })).json();
+    const rem = res.alerts.find((a: { kind: string }) => a.kind === 'reminder');
+    expect(rem).toMatchObject({ kind: 'reminder', id: 'test-reminder-1', title: 'Get milk' });
+    expect(await (await post('/api/snooze', { id: 'test-reminder-1', minutes: 10 })).json()).toEqual({ snoozed: true, minutes: 10 });
+    expect((await post('/api/snooze', { id: 'nope' })).status).toBe(404);
+  });
+});
+
+describe('business mode', () => {
+  it('stores connections, replies as the user, and ignores unknown connections', async () => {
+    // @ts-expect-error plain JS module
+    const { _ingestForTests, sendBody } = await import('../server/telegram.mjs');
+    expect(sendBody(5, 'hi', 'bc1')).toEqual({ chat_id: 5, text: 'hi', business_connection_id: 'bc1' });
+    expect(sendBody(5, 'hi')).toEqual({ chat_id: 5, text: 'hi' });
+    _ingestForTests({ business_connection: { id: 'bc1', user_chat_id: 77, is_enabled: true } });
+    process.env.TELEGRAM_BOT_TOKEN = 'test-token';
+    try {
+      _ingestForTests({ business_connection_id: 'bc1', chat: { id: 4242, type: 'private' }, from: { id: 4242, first_name: 'Bo' }, text: 'Are we on?', date: Date.now() / 1000 });
+      _ingestForTests({ business_connection_id: 'unknown', chat: { id: 4343, type: 'private' }, from: { id: 4343, first_name: 'Zed' }, text: 'x', date: Date.now() / 1000 });
+      const a = await (await post('/api/alerts', { since: Date.now() - 5000 })).json();
+      expect(a.alerts.some((x: { threadId?: string }) => x.threadId === '4242')).toBe(true);
+      expect(a.alerts.some((x: { threadId?: string }) => x.threadId === '4343')).toBe(false);
+    } finally {
+      delete process.env.TELEGRAM_BOT_TOKEN;
+    }
+  });
+});
+
+describe('voice notes, threaded replies and business hardening', () => {
+  it('threads replies to the last message and labels untranscribed voice notes', async () => {
+    // @ts-expect-error plain JS module
+    const { _handleForTests, sendBody, recentThreads } = await import('../server/telegram.mjs');
+    expect(sendBody(5, 'hi', '', 9)).toEqual({ chat_id: 5, text: 'hi', reply_parameters: { message_id: 9, allow_sending_without_reply: true } });
+    await _handleForTests({ message_id: 31, chat: { id: -777, type: 'group', title: 'Voice group' }, from: { first_name: 'Lu' }, voice: { file_id: 'f', duration: 5, file_size: 1000 }, date: Date.now() / 1000 });
+    const t = recentThreads().find((x: { id: string }) => x.id === '-777');
+    expect(t.messages.at(-1).text).toMatch(/^\[Voice note/);
+    expect(t.replyTo).toBe(31);
+  });
+  it('ignores business connections from accounts that are not the owner and drops chats on revoke', async () => {
+    // @ts-expect-error plain JS module
+    const { _ingestForTests } = await import('../server/telegram.mjs');
+    // @ts-expect-error plain JS module
+    const { store } = await import('../server/store.mjs');
+    const prev = store.data.ownerChatId;
+    store.data.ownerChatId = '55';
+    try {
+      _ingestForTests({ business_connection: { id: 'evil', user_chat_id: 99, is_enabled: true } });
+      expect(store.data.businessConnections.evil).toBeUndefined();
+      _ingestForTests({ business_connection: { id: 'ok1', user_chat_id: 55, is_enabled: true, rights: { can_reply: false } } });
+      expect(store.data.businessConnections.ok1.canReply).toBe(false);
+      _ingestForTests({ business_connection: { id: 'ok1', user_chat_id: 55, is_enabled: false } });
+      expect(store.data.businessConnections.ok1).toBeUndefined();
+    } finally {
+      store.data.ownerChatId = prev;
     }
   });
 });

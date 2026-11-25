@@ -42,7 +42,8 @@ export const api = {
   saveReminder: (r: Reminder, id: string) => call<{ scheduled: boolean }>('/api/reminders', { ...r, id }),
   next: () => call<{ event: EventCard | null }>('/api/next', clock()),
   threads: () => call<{ threads: Thread[] }>('/api/threads', {}),
-  alerts: (since: number) => call<{ alerts: (Alert & { at: number })[] }>('/api/alerts', { since }, undefined, 8000),
+  alerts: (since: number) => call<{ alerts: (Alert & { at: number })[]; unread: number }>('/api/alerts', { since }, undefined, 8000),
+  snooze: (id: string, minutes: number) => call<{ snoozed: boolean }>('/api/snooze', { id, minutes }),
   draft: (threadId: string, instruction?: string, previousDraft?: string) => call<Draft>('/api/draft', { threadId, instruction, previousDraft }),
   send: (threadId: string, text: string, id: string) => call<{ sent: boolean; name: string }>('/api/send', { threadId, text, id, confirmed: true }),
 };

@@ -73,7 +73,7 @@ A free plan sleeps when idle, which stops Telegram polling and reminders, so the
 
 ## Tests
 
-`npm test` runs 114 tests: the time/intent parser, the state machine, the backend over HTTP, Telegram pairing and store recovery, the LLM paths against a fake OpenAI-compatible API, voice capture (hold to talk, tap to talk, too-short audio, silence, speech-service outage, cancel) and the runtime against a fake glasses bridge.
+`npm test` runs 123 tests: the time/intent parser, the state machine, the backend over HTTP, Telegram pairing and store recovery, the LLM paths against a fake OpenAI-compatible API, voice capture (hold to talk, tap to talk, too-short audio, silence, speech-service outage, cancel) and the runtime against a fake glasses bridge.
 
 ## Voice
 
@@ -82,3 +82,11 @@ The glasses microphone sends 16 kHz, 16-bit mono PCM frames. The app buffers the
 ## Not verified yet
 
 Verified outside the simulator: real Telegram delivery in both directions (bot pairing, a reminder, and a group reply), AI summaries and drafts through OpenRouter, and Whisper transcription of recorded speech. Not verified: physical G2 hardware (microphone format, event types) and live calendar. The simulator run covered Prep it, Send it, hold-to-speak and error recovery in demo mode.
+
+
+## Business mode and lens reminders
+
+- Telegram Business mode (Premium): connect @ohalrightbot under Settings > Business > Chatbots so it can see your private chats and reply as you. Untested live; covered by unit tests.
+- Due reminders show on the lens as a card: tap = got it, double tap = snooze 10 min.
+- Home shows "(N new)" for unread chats.
+- "Other reply" cycles two alternative drafts. Telegram voice notes are transcribed (needs the speech key). Replies are threaded to the last message.

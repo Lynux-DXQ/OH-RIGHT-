@@ -22,12 +22,12 @@ export async function chatJson(system, user, { timeoutMs = 12000 } = {}) {
   return JSON.parse(data.choices?.[0]?.message?.content || 'null');
 }
 
-export async function transcribe(wavBuffer) {
+export async function transcribe(wavBuffer, { type = 'audio/wav', name = 'speech.wav' } = {}) {
   if (!sttEnabled()) return null;
   const key = env('STT_API_KEY') || env('LLM_API_KEY');
   const base = (env('STT_BASE_URL') || env('LLM_BASE_URL', 'https://api.openai.com/v1')).replace(/\/$/, '');
   const form = new FormData();
-  form.append('file', new Blob([wavBuffer], { type: 'audio/wav' }), 'speech.wav');
+  form.append('file', new Blob([wavBuffer], { type }), name);
   form.append('model', env('STT_MODEL', 'whisper-1'));
   form.append('language', 'en');
   const res = await fetch(base + '/audio/transcriptions', {

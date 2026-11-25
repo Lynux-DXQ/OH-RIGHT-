@@ -1,4 +1,4 @@
-import { DRAFT_OPTIONS, HOME_ITEMS, REMINDER_OPTIONS, type Screen } from './machine';
+import { draftOptions, HOME_ITEMS, REMINDER_OPTIONS, SNOOZE_MINUTES, type Screen } from './machine';
 
 export type Layout = {
   kind: 'text' | 'list';
@@ -35,10 +35,10 @@ const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…'
 
 const options = (labels: string[], sel: number) => labels.map((l, i) => (i === sel ? '[ ' + l + ' ]' : '  ' + l + '  ')).join('  ');
 
-export function render(s: Screen): Layout {
+export function render(s: Screen, unread = 0): Layout {
   switch (s.t) {
     case 'home':
-      return { kind: 'list', header: 'OH, RIGHT!', body: '', list: HOME_ITEMS, footer: 'Scroll, then tap  ·  Hold to speak' };
+      return { kind: 'list', header: 'OH, RIGHT!', body: '', list: HOME_ITEMS.map((l, i) => (i === 2 && unread > 0 ? l + '  (' + unread + ' new)' : l)), footer: 'Scroll, then tap  ·  Hold to speak' };
 
     case 'prompt':
       return {
@@ -88,11 +88,14 @@ export function render(s: Screen): Layout {
       return {
         kind: 'text',
         header: 'Reply to ' + clip(s.d.name, 26),
-        body: wrap(s.d.summary, COLS, 3).join('\n') + '\n\nYour reply:\n' + wrap(s.d.text, COLS, 3).join('\n'),
-        footer: options(DRAFT_OPTIONS, s.sel),
+        body: wrap(s.d.summary, COLS, 2).join('\n') + '\n\nYour reply:\n' + wrap(s.d.text, COLS, 3).join('\n'),
+        footer: options(draftOptions(s.d), s.sel),
       };
 
     case 'alert':
+      if (s.a.kind === 'reminder') {
+        return { kind: 'text', header: 'Reminder', body: wrap(s.a.title, COLS, 5).join('\n'), footer: 'Tap: got it  ·  Double tap: snooze ' + SNOOZE_MINUTES + ' min' };
+      }
       return {
         kind: 'text',
         header: 'New message  ·  ' + clip(s.a.name, 20),

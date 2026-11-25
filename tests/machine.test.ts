@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beginTyped, initialState, onTranscript, reduce, type Input, type State, type Effect } from '../app/src/machine';
+import { beginTyped, draftOptions, initialState, onTranscript, reduce, type Input, type State, type Effect } from '../app/src/machine';
 import { render, wrap } from '../app/src/render';
 
 const T = 1_000_000;
@@ -129,7 +129,7 @@ describe('render', () => {
 });
 
 describe('push alerts', () => {
-  const a = { threadId: '77', name: 'Mum', from: 'Mum', text: 'Are you coming?' };
+  const a = { kind: 'message' as const, threadId: '77', name: 'Mum', from: 'Mum', text: 'Are you coming?' };
   it('shows a new message alert only from the home screen', () => {
     expect(reduce(initialState(), { k: 'alert', a }).state.screen).toMatchObject({ t: 'alert', a });
     const busy: State = { screen: { t: 'busy', label: 'Sending', purpose: 'any', back: { t: 'home', sel: 0 } } };
@@ -150,5 +150,43 @@ describe('push alerts', () => {
     expect(l.header).toContain('Mum');
     expect(l.body).toContain('Are you coming?');
     expect(l.footer).toContain('dismiss');
+  });
+});
+
+describe('reminder alerts and unread badge', () => {
+  const ra = { kind: 'reminder' as const, id: 'r1', title: 'Call Sam' };
+  it('interrupts busy screens, dismisses on tap, snoozes on double tap', () => {
+    const busy = feed(initialState(), { k: 'click', at: T }).state;
+    const shown = reduce(busy, { k: 'alert', a: ra }).state;
+    expect(shown.screen.t).toBe('alert');
+    expect(reduce(shown, { k: 'click', at: T + 1000 }).state.screen.t).toBe('home');
+    const d = reduce(shown, { k: 'double', at: T + 1000 });
+    expect(d.state.screen.t).toBe('home');
+    expect(d.effects).toContainEqual({ e: 'snooze', id: 'r1', minutes: 10 });
+  });
+  it('shows the unread count on home and renders the reminder card', () => {
+    const s = reduce(initialState(), { k: 'unread', n: 3 }).state;
+    expect(s.unread).toBe(3);
+    expect(render(s.screen, 3)).toMatchObject({ kind: 'list' });
+    expect(JSON.stringify(render(s.screen, 3))).toContain('(3 new)');
+    expect(JSON.stringify(render({ t: 'alert', a: ra }))).toContain('snooze');
+  });
+});
+
+describe('other reply picker and spoken reminder edits', () => {
+  const d = { threadId: 'b', name: 'Dev', summary: 'Deploy?', text: 'Shipping at 5.', alts: ['Sounds good.', 'Busy, later.'] };
+  const th = [{ id: 'b', name: 'Dev', unread: 1, summary: '' }];
+  it('Other reply cycles the draft without sending anything', () => {
+    const s = feed(initialState(), { k: 'list', idx: 2, at: T }, { k: 'threads', items: th }, { k: 'click', at: T }, { k: 'drafted', d, items: th }, { k: 'down', at: T }, { k: 'down', at: T }, { k: 'click', at: T });
+    expect(s.effects.some((e) => e.e === 'send')).toBe(false);
+    expect(s.state.screen).toMatchObject({ t: 'draft', d: { text: 'Sounds good.', alts: ['Busy, later.', 'Shipping at 5.'] } });
+  });
+  it('Other reply is not offered without alternatives', () => {
+    expect(draftOptions({ ...d, alts: [] })).toEqual(['Send', 'Change', 'Cancel']);
+  });
+  it('a spoken time change keeps the reminder title', () => {
+    const rem = { t: 'busy' as const, label: 'x', purpose: 'editReminder' as const, back: { t: 'reminder' as const, r: { title: 'call Sam', whenISO: '', whenLabel: 'Tomorrow 6:00 PM' }, sel: 1 } };
+    expect(onTranscript({ screen: rem }, 'make it 7 pm').effects).toEqual([{ e: 'parse', text: 'remind me to call Sam at 7 pm' }]);
+    expect(onTranscript({ screen: rem }, 'remind me to call Ann at 8').effects).toEqual([{ e: 'parse', text: 'remind me to call Ann at 8' }]);
   });
 });
