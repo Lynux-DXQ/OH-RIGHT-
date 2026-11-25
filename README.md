@@ -8,6 +8,12 @@ Catch it. Prep it. Send it. A voice-first daily assistant for Even Realities G2 
 
 Gestures: scroll to move, tap to choose, double tap to go back or cancel, hold (or tap) to speak.
 
+## Hackathon notes
+
+- **Track:** 04 AI Assistants & Work, and the Best Telegram integration prize. Services used: Telegram (bot), Google Calendar (read-only secret iCal feed), and an OpenAI-compatible model (OpenAI or OpenRouter, for example `LLM_BASE_URL=https://openrouter.ai/api/v1`).
+- **What existed before Nov 23:** nothing. The code was written during the hackathon. Open-source libraries: Even Hub SDK, Vite, TypeScript, Vitest.
+- **Submission text and feature requests:** [docs/SUBMISSION.md](docs/SUBMISSION.md).
+
 ## Screenshots
 
 ![Phone panel](docs/phone-panel.png)
