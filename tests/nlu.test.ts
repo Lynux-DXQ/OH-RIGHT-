@@ -97,6 +97,12 @@ describe('regressions from the audit', () => {
     expect(r.title).toBe(title);
     expect(r.whenISO).toBe(iso);
   });
+  it('a recognizer that hears "its six" instead of "at six" still gets the time', () => {
+    const r = rem('Remind me to get milk its six');
+    expect(r.title).toBe('Get milk');
+    expect(r.whenISO).toBe('2026-11-25T17:00:00.000Z');
+  });
+
   it('tonight at midnight stays tonight', () => {
     expect(rem('remind me to pay bills tonight at midnight').whenISO).toBe('2026-11-25T23:00:00.000Z');
   });

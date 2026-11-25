@@ -77,7 +77,12 @@ const routes = {
     if (!sttEnabled()) throw new HttpError(501, 'Voice is not set up on the server. Type your command in the phone app instead.');
     const wav = await readBody(req, 3_000_000);
     if (wav.length < 2000) throw new HttpError(400, 'Recording too short');
-    return { text: (await transcribe(wav)) || '' };
+    try {
+      return { text: (await transcribe(wav)) || '' };
+    } catch (err) {
+      console.error('[stt]', err.message);
+      throw new HttpError(502, 'Speech recognition is unavailable right now. Try again, or type it in the phone app.');
+    }
   },
 
   'POST /api/parse': async (req) => {

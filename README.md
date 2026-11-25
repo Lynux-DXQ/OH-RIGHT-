@@ -54,7 +54,11 @@ If you build with `VITE_APP_TOKEN`, that token is readable by anyone who unpacks
 
 ## Tests
 
-`npm test` runs 75 tests: the time/intent parser, the state machine, the backend over HTTP, and the runtime against a fake glasses bridge. `npm run typecheck` and `npm run build` are clean.
+`npm test` runs 87 tests: the time/intent parser, the state machine, the backend over HTTP, Telegram pairing and store recovery, the LLM paths against a fake OpenAI-compatible API, voice capture (hold to talk, tap to talk, too-short audio, silence, speech-service outage, cancel) and the runtime against a fake glasses bridge.
+
+## Voice
+
+The glasses microphone sends 16 kHz, 16-bit mono PCM frames. The app buffers them while you hold (or tap) to talk, wraps them in a WAV and posts them to `/api/stt`, which forwards them to any OpenAI-compatible `/audio/transcriptions` endpoint. The transcript then goes to the parser. Tests check that the uploaded bytes are exactly what the microphone sent. I also ran synthesized speech through a real recognizer (Windows speech recognition), which routed "what is next" and "messages to reply to" correctly and turned "remind me to get milk at six" into a reminder. Whisper accuracy with a real G2 microphone is untested.
 
 ## Not verified yet
 

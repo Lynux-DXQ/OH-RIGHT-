@@ -60,6 +60,7 @@ export function normalizeSpoken(input) {
     .replace(/\b(at|by|around)\s+midnight\b/gi, '$1 12 am')
     .replace(new RegExp('(\\d{1,2}(?::\\d{2})?|' + HW + ')\\s+in the (morning|afternoon|evening)\\b', 'gi'), (_, t, p) => t + (p.toLowerCase() === 'morning' ? ' am' : ' pm'))
     .replace(new RegExp('(\\d{1,2}(?::\\d{2})?|' + HW + ')\\s+at night\\b', 'gi'), '$1 pm')
+    .replace(new RegExp("\\bit['’]?s\\s+(" + HW + '|\\d{1,2}(?::\\d{2})?)(\\s*(?:am|pm))?\\s*$', 'i'), (_, t, p) => 'at ' + t + (p || ''))
     .replace(/\s{2,}/g, ' ')
     .trim();
 }
