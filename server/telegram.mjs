@@ -35,7 +35,10 @@ export async function sendTelegram(chatId, text) {
 }
 
 function ingest(msg) {
-  if (!msg?.chat || typeof msg.text !== 'string') return;
+  if (!msg?.chat || typeof msg.text !== 'string') {
+    if (msg?.chat) console.log('[telegram] ignored a non-text message from chat ' + msg.chat.id);
+    return;
+  }
   const chatId = String(msg.chat.id);
   const owner = store.data.ownerChatId;
 
@@ -56,9 +59,15 @@ function ingest(msg) {
     return;
   }
 
-  if (chatId === owner) return;
+  if (chatId === owner) {
+    console.log('[telegram] message from the owner chat ignored (owner messages are never replied-to threads)');
+    return;
+  }
   const filter = allowed();
-  if (filter.size && !filter.has(chatId)) return;
+  if (filter.size && !filter.has(chatId)) {
+    console.log('[telegram] chat ' + chatId + ' is not in ALLOWED_CHAT_IDS');
+    return;
+  }
 
   const name = msg.chat.title || [msg.chat.first_name, msg.chat.last_name].filter(Boolean).join(' ') || msg.chat.username || 'Chat ' + chatId;
   const from = msg.from ? [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || msg.from.username || 'Someone' : 'Someone';
@@ -68,6 +77,7 @@ function ingest(msg) {
   t.messages = t.messages.slice(-12);
   t.unread += 1;
   threads.set(chatId, t);
+  console.log('[telegram] new message in chat ' + chatId + ' (' + t.messages.length + ' held)');
   if (threads.size > 50) threads.delete(recentThreads().at(-1).id);
 }
 

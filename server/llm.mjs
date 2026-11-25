@@ -1,7 +1,7 @@
 const env = (k, d = '') => process.env[k] || d;
 
 export const llmEnabled = () => Boolean(env('LLM_API_KEY'));
-export const sttEnabled = () => Boolean(env('STT_API_KEY') || env('LLM_API_KEY'));
+export const sttEnabled = () => Boolean(env('STT_API_KEY') || (env('LLM_API_KEY') && /^https:\/\/api\.(openai|groq)\.com/.test(env('LLM_BASE_URL', 'https://api.openai.com/v1'))));
 
 export async function chatJson(system, user, { timeoutMs = 12000 } = {}) {
   if (!llmEnabled()) return null;
