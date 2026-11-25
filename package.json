@@ -1,0 +1,28 @@
+{
+  "name": "oh-right",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OH, RIGHT! - catch it, prep it, send it. Voice-first daily assistant for Even Realities G2.",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "server": "node server/index.mjs",
+    "app": "vite --config app/vite.config.ts",
+    "build": "tsc --noEmit -p app && vite build --config app/vite.config.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p app",
+    "sim": "evenhub-simulator http://localhost:5173",
+    "qr": "evenhub qr --url http://localhost:5173",
+    "pack": "node scripts/check-manifest.mjs && npm run build && evenhub pack app.json dist -o oh-right.ehpk"
+  },
+  "dependencies": {
+    "@evenrealities/even_hub_sdk": "0.0.16"
+  },
+  "devDependencies": {
+    "@evenrealities/evenhub-cli": "^0.2.0",
+    "@evenrealities/evenhub-simulator": "^0.9.5",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.2"
+  }
+}

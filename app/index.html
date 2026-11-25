@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>OH, RIGHT!</title>
+<style>
+  :root { color-scheme: dark; --g: #8cf5a8; --mid: #5bbf7a; --dim: #2f6b42; --bg: #06100a; --panel: #0e1c13; --line: #1f3a29; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; background: #040805; color: #e3f7e9; padding: 20px 16px 40px; max-width: 560px; margin-inline: auto; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: .03em; }
+  .sub { color: var(--mid); margin: 2px 0 18px; }
+  .lens { background: var(--bg); border: 1px solid var(--line); border-radius: 14px; font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--g); aspect-ratio: 2 / 1; width: 100%; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; box-shadow: 0 0 30px rgba(80, 255, 140, .06) inset; }
+  .lens > div { padding: 8px 14px; white-space: pre-wrap; }
+  #hdr { border-bottom: 1px solid var(--line); font-weight: 700; }
+  #ftr { border-top: 1px solid var(--line); color: var(--mid); font-size: 13px; }
+  #body { font-size: 16px; overflow: hidden; }
+  #mode { color: var(--dim); font-size: 13px; margin-top: 8px; }
+  #hint { color: var(--mid); font-size: 14px; min-height: 1.4em; margin-top: 4px; }
+  h2 { font-size: 15px; font-weight: 600; color: #e3f7e9; margin: 26px 0 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+  button { background: var(--panel); color: inherit; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--dim); }
+  button:active { background: var(--dim); }
+  button.go { background: var(--g); color: #04120a; border-color: var(--g); font-weight: 600; }
+  input { background: var(--panel); color: inherit; border: 1px solid var(--line); border-radius: 10px; padding: 11px 14px; font: inherit; width: 100%; }
+  input:focus { outline: 2px solid var(--dim); }
+  form { display: flex; gap: 8px; } form input { flex: 1; }
+  .chips button { font-size: 14px; color: var(--g); }
+  #health.ok { color: var(--g); } #health.bad { color: #ff9a9a; }
+  details { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 12px; }
+  summary { cursor: pointer; color: var(--mid); font-size: 15px; }
+  label { display: block; margin: 10px 0 4px; font-size: 14px; color: var(--mid); }
+  .note { color: var(--mid); font-size: 14px; margin: 6px 0; }
+</style>
+</head>
+<body>
+  <h1>OH, RIGHT!</h1>
+  <p class="sub">Remember it. Prep for it. Reply to it.</p>
+
+  <div class="lens" aria-label="What your glasses are showing">
+    <div id="hdr"></div>
+    <div id="body"></div>
+    <div id="ftr"></div>
+  </div>
+  <div id="mode"></div>
+  <div id="hint"></div>
+
+  <h2>Tell it what you need</h2>
+  <form id="say">
+    <input id="sayText" placeholder='Try: remind me to get milk at six' autocomplete="off" />
+    <button class="go" type="submit">Go</button>
+  </form>
+  <div class="row chips">
+    <button data-example="Remind me to get milk at six">Remember milk at six</button>
+    <button data-example="What is next?">What is next?</button>
+    <button data-example="Any messages I should reply to?">Reply to a chat</button>
+  </div>
+  <p class="note">On the glasses you speak instead. This box does the same thing when you cannot.</p>
+
+  <details>
+    <summary>Test the glasses buttons</summary>
+    <div class="row">
+      <button data-g="up">Scroll up</button>
+      <button data-g="down">Scroll down</button>
+      <button data-g="click">Tap</button>
+      <button data-g="double">Double tap</button>
+      <button data-g="press">Hold</button>
+      <button data-g="release">Let go</button>
+    </div>
+    <div class="row">
+      <button data-pick="0">Menu: Remember</button>
+      <button data-pick="1">Menu: What is next</button>
+      <button data-pick="2">Menu: Reply</button>
+    </div>
+  </details>
+
+  <details>
+    <summary>Server settings</summary>
+    <label for="apiBase">Backend URL (leave blank if it is the same site)</label>
+    <input id="apiBase" placeholder="https://your-backend.example.com" />
+    <label for="apiToken">App token (only if you set APP_TOKEN)</label>
+    <input id="apiToken" type="password" autocomplete="off" />
+    <div class="row"><button id="saveCfg" type="button">Save and test</button></div>
+    <div id="health"></div>
+  </details>
+
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>

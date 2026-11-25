@@ -1,0 +1,25 @@
+{
+  "package_id": "com.ohright.assistant",
+  "edition": "202601",
+  "name": "OH, RIGHT!",
+  "version": "0.1.0",
+  "min_app_version": "2.2.10",
+  "min_sdk_version": "0.0.16",
+  "entrypoint": "index.html",
+  "permissions": [
+    {
+      "name": "network",
+      "desc": "Talks to the OH, RIGHT! backend to parse voice commands, schedule reminders, read the next calendar event and send approved Telegram replies.",
+      "whitelist": [
+        "https://YOUR-BACKEND-HOST"
+      ]
+    },
+    {
+      "name": "g2-microphone",
+      "desc": "Records a short voice command while you hold or tap to speak."
+    }
+  ],
+  "supported_languages": [
+    "en"
+  ]
+}

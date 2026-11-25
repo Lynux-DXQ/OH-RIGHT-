@@ -1,0 +1,61 @@
+# OH, RIGHT!
+
+Catch it. Prep it. Send it. A voice-first daily assistant for Even Realities G2 glasses, built for the Heads Up hackathon (track: AI Assistants & Work, with Telegram as a core integration).
+
+- **Catch it**: say "remind me to get milk at six". The glasses show the task and time. You confirm, and a Telegram reminder is scheduled.
+- **Prep it**: say "what is next?". You get your next calendar event with a one-line prep note.
+- **Send it**: pick a Telegram chat, review a one-line summary and an AI draft, speak a change if you want one, then Send or Cancel. Nothing is sent without an explicit tap on Send.
+
+Gestures: scroll to move, tap to choose, double tap to go back or cancel, hold (or tap) to speak.
+
+## Screenshots
+
+![Phone panel](docs/phone-panel.png)
+![Home](docs/glasses-home.png)
+![Remember something](docs/glasses-remember.png)
+![What is next](docs/glasses-next.png)
+![Reply](docs/glasses-reply.png)
+
+## Run it
+
+```bash
+npm install
+npm run dev        # backend on :8787, app on :5173
+npm run sim        # Even Hub simulator pointed at the app (second terminal)
+```
+
+With no configuration the backend runs in **demo mode**: seeded calendar and chats, reminders and replies are logged to the console instead of Telegram, and the built-in parser handles commands. The phone panel (the web page itself) has a text box for "say it" and buttons for every glasses gesture, so the whole flow works without a microphone or glasses.
+
+Copy `.env.example` to `.env` to go live:
+
+| Variable | Effect |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | Real reminders and replies. Message the bot `/start` (add your token as `/start <APP_TOKEN>` if you set one) to pair the owner chat. The first chat to pair wins, and no other chat can take over later. |
+| `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` | Any OpenAI-compatible API for smarter intent parsing, chat summaries, drafts and prep notes. |
+| `STT_API_KEY`, `STT_BASE_URL`, `STT_MODEL` | Speech to text for the glasses microphone (OpenAI Whisper or Groq). |
+| `ICS_URL` | Secret iCal URL for your real calendar (recurring events are not expanded). |
+| `APP_TOKEN` | Shared secret the app sends with every request. Required to listen on anything other than localhost. Without it, only localhost pages can call the backend. |
+
+## On real glasses
+
+1. Deploy the backend anywhere that runs Node 20+ (`node server/index.mjs`). Set `APP_TOKEN` first: the server refuses to listen on a public address without one.
+2. Put your backend's HTTPS host in the `whitelist` of `app.json`.
+3. Build with the backend address baked in: `VITE_API_BASE=https://your-backend npm run pack`. The pack script stops if the whitelist still holds the placeholder. The glasses app has its own storage, so the phone panel's Server settings only affect the browser preview.
+4. Use `evenhub login`, then `evenhub create oh-right.ehpk --name "OH, RIGHT!" --tagline "Remember it. Prep for it. Reply to it."`.
+5. To test live on a phone before packing, run `npm run qr` with your computer's LAN address instead of localhost (`evenhub qr --url http://<lan-ip>:5173`).
+
+If you build with `VITE_APP_TOKEN`, that token is readable by anyone who unpacks the `.ehpk`. Treat it as a low-value shared secret and keep real credentials (Telegram, LLM, calendar) on the server only.
+
+## Design notes
+
+- `app/src/machine.ts` is a pure state machine (screen + input in, screen + effects out). `runtime.ts` runs the effects against the SDK and the API. Results from a cancelled step are discarded, so a late response never changes the screen.
+- Safety: the backend refuses `/api/send` unless `confirmed: true`; chat text is passed to the model as untrusted data; incoming Telegram messages are held in memory for 60 minutes only (sample chats in demo mode do not expire); no API keys exist in the glasses app; reminder and send requests carry client ids so a retry never duplicates.
+- Every screen is clipped to what fits on the 576x288 display.
+
+## Tests
+
+`npm test` runs 75 tests: the time/intent parser, the state machine, the backend over HTTP, and the runtime against a fake glasses bridge. `npm run typecheck` and `npm run build` are clean.
+
+## Not verified yet
+
+Real G2 hardware, real Telegram delivery and live speech-to-text need your keys and device. They are untested here. The simulator run covered Prep it, Send it, hold-to-speak and error recovery in demo mode.
