@@ -5,6 +5,7 @@ Catch it. Prep it. Send it. A voice-first daily assistant for Even Realities G2 
 - **Catch it**: say "remind me to get milk at six". The glasses show the task and time. You confirm, and a Telegram reminder is scheduled.
 - **Prep it**: say "what is next?". You get your next calendar event with a one-line prep note.
 - **Send it**: pick a Telegram chat, review a one-line summary and an AI draft, speak a change if you want one, then Send or Cancel. Nothing is sent without an explicit tap on Send.
+- **Bot commands and pings**: in your private chat with the bot, `/notify on` makes it message you when someone writes in a chat it can see (off by default, at most one ping per chat every 30 seconds). `/mute 60` pauses pings, `/status` shows what is on, `/reminders` lists what is pending and `/help` lists the commands.
 - **New message alerts**: while you are on the home menu, a new Telegram message shows as a short card (tap to reply, double tap to dismiss). The app checks the backend every 8 seconds, with no AI call, and an alert never interrupts a task in progress. Verified against the backend feed with live Telegram; the card itself is covered by state-machine tests, not yet by a live simulator run.
 
 Gestures: scroll to move, tap to choose, double tap to go back or cancel, hold (or tap) to speak.
@@ -72,7 +73,7 @@ A free plan sleeps when idle, which stops Telegram polling and reminders, so the
 
 ## Tests
 
-`npm test` runs 110 tests: the time/intent parser, the state machine, the backend over HTTP, Telegram pairing and store recovery, the LLM paths against a fake OpenAI-compatible API, voice capture (hold to talk, tap to talk, too-short audio, silence, speech-service outage, cancel) and the runtime against a fake glasses bridge.
+`npm test` runs 114 tests: the time/intent parser, the state machine, the backend over HTTP, Telegram pairing and store recovery, the LLM paths against a fake OpenAI-compatible API, voice capture (hold to talk, tap to talk, too-short audio, silence, speech-service outage, cancel) and the runtime against a fake glasses bridge.
 
 ## Voice
 

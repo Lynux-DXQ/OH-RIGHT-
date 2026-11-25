@@ -5,6 +5,8 @@ const TTL_MS = 60 * 60 * 1000;
 const allowed = () => new Set((process.env.ALLOWED_CHAT_IDS || '').split(',').map((s) => s.trim()).filter(Boolean));
 
 const threads = new Map();
+const lastNotified = new Map();
+const NOTIFY_GAP_MS = 30 * 1000;
 let offset = 0;
 let running = false;
 
@@ -34,6 +36,66 @@ export async function sendTelegram(chatId, text) {
   return { demo: false };
 }
 
+const HELP = [
+  'OH, RIGHT! commands:',
+  '/status - what is on and what is waiting',
+  '/notify on|off - get a Telegram ping when a chat messages you (off by default)',
+  '/mute 60 - pause pings for 60 minutes, /mute off to resume',
+  '/reminders - your upcoming reminders',
+  '/help - this list',
+].join('\n');
+
+function ownerCommand(chatId, text) {
+  const [cmd, arg = ''] = text.trim().split(/\s+/);
+  const s = store.data.settings;
+  const say = (t) => sendTelegram(chatId, t).catch(() => {});
+  const muted = () => s.muteUntil > Date.now();
+  switch (cmd.split('@')[0].toLowerCase()) {
+    case '/help':
+      return say(HELP);
+    case '/status': {
+      const due = store.data.reminders.filter((r) => !r.delivered && !r.failed).length;
+      return say([
+        'Paired: yes',
+        'Pings for new messages: ' + (s.notify ? (muted() ? 'on, muted for ' + Math.ceil((s.muteUntil - Date.now()) / 60000) + ' more min' : 'on') : 'off'),
+        'Chats waiting: ' + recentThreads().filter((t) => t.unread).length,
+        'Reminders pending: ' + due,
+      ].join('\n'));
+    }
+    case '/notify':
+      if (!['on', 'off'].includes(arg.toLowerCase())) return say('Use /notify on or /notify off. Currently ' + (s.notify ? 'on' : 'off') + '.');
+      s.notify = arg.toLowerCase() === 'on';
+      store.save();
+      return say(s.notify ? 'Pings are on. I will message you here when someone writes in a chat I can see. Use /mute 60 to pause.' : 'Pings are off. New messages still show on your glasses.');
+    case '/mute': {
+      if (arg.toLowerCase() === 'off') s.muteUntil = 0;
+      else {
+        const mins = Number(arg);
+        if (!Number.isFinite(mins) || mins <= 0 || mins > 1440) return say('Use /mute 60 for an hour (up to 1440), or /mute off.');
+        s.muteUntil = Date.now() + mins * 60000;
+      }
+      store.save();
+      return say(s.muteUntil ? 'Muted for ' + Math.round((s.muteUntil - Date.now()) / 60000) + ' minutes.' : 'Unmuted.');
+    }
+    case '/reminders': {
+      const list = store.data.reminders.filter((r) => !r.delivered && !r.failed).sort((a, b) => a.dueAt - b.dueAt).slice(0, 8);
+      return say(list.length ? 'Upcoming:\n' + list.map((r) => '- ' + r.title + ' (' + new Date(r.dueAt).toISOString().slice(0, 16).replace('T', ' ') + ' UTC)').join('\n') : 'No reminders pending.');
+    }
+    default:
+      return say('I did not recognise that. ' + HELP);
+  }
+}
+
+function maybeNotify(t, from, text) {
+  const s = store.data.settings;
+  const owner = store.data.ownerChatId;
+  if (!owner || !s.notify || s.muteUntil > Date.now()) return;
+  const now = Date.now();
+  if (now - (lastNotified.get(t.id) || 0) < NOTIFY_GAP_MS) return;
+  lastNotified.set(t.id, now);
+  sendTelegram(owner, '💬 ' + t.name.slice(0, 40) + '\n' + from.slice(0, 30) + ': ' + text.slice(0, 200) + '\n\nReply from your glasses, or /mute 60 to pause pings.').catch((err) => console.error('[telegram] ping failed:', err.message));
+}
+
 function ingest(msg) {
   if (!msg?.chat || typeof msg.text !== 'string') {
     if (msg?.chat) console.log('[telegram] ignored a non-text message from chat ' + msg.chat.id);
@@ -60,6 +122,10 @@ function ingest(msg) {
   }
 
   if (chatId === owner) {
+    if (msg.chat.type === 'private' && msg.text.startsWith('/')) {
+      ownerCommand(chatId, msg.text);
+      return;
+    }
     console.log('[telegram] message from the owner chat ignored (owner messages are never replied-to threads)');
     return;
   }
@@ -78,6 +144,7 @@ function ingest(msg) {
   t.unread += 1;
   threads.set(chatId, t);
   console.log('[telegram] new message in chat ' + chatId + ' (' + t.messages.length + ' held)');
+  maybeNotify(t, from, msg.text);
   if (threads.size > 50) threads.delete(recentThreads().at(-1).id);
 }
 
@@ -98,6 +165,13 @@ export async function startPolling() {
   if (!telegramEnabled() || running) return;
   running = true;
   await api('deleteWebhook', {}).catch(() => {});
+  await api('setMyCommands', { commands: [
+    { command: 'status', description: 'What is on and what is waiting' },
+    { command: 'notify', description: 'Ping me about new messages: on or off' },
+    { command: 'mute', description: 'Pause pings, for example /mute 60' },
+    { command: 'reminders', description: 'Upcoming reminders' },
+    { command: 'help', description: 'Show the commands' },
+  ] }).catch(() => {});
   while (running) {
     try {
       const updates = await api('getUpdates', { offset, timeout: 25, allowed_updates: ['message'] }, 35000);

@@ -25,6 +25,7 @@ Also entering: Special prize - Best Telegram integration
 - **Catch it.** Say "remind me to get milk at six". The glasses show "Save this reminder?" with the task and the time. Tap Save and a reminder is scheduled. When it is due, it arrives on Telegram.
 - **Prep it.** Ask "what is next?" and you get your next calendar event with a one-line note, such as an open item you owe someone.
 - **Send it.** A card tells you who messaged you and what they said. An AI writes a draft reply. You can change it by voice ("say yes, I'll bring dessert"), then choose Send. Nothing goes out without that tap.
+- **Telegram commands and pings.** In the bot chat, /notify on turns on a ping when someone writes in a chat the bot can see. It is off by default, and /mute 60 pauses it. /status and /reminders show what is waiting.
 - **New message alerts.** While you are on the home menu, a new Telegram message pops up as a short card. Tap to reply or double tap to dismiss. If you are in the middle of something else, the alert waits.
 
 ## Why it helps in everyday life
@@ -43,7 +44,7 @@ The glasses app is written in TypeScript with Vite and the Even Hub SDK. It draw
 
 **Safety.** Sends and reminders always need a tap. Chat text is treated as untrusted input in the prompts. Repeated requests are not duplicated. The backend listens on localhost by default, rejects unknown browser origins and refuses to run on a public address without a token. API keys stay on the server. Telegram messages are kept in memory for 60 minutes.
 
-**Testing.** 110 automated tests cover the parser, the state machine, the backend over HTTP, voice capture, the AI paths, new message alerts and the glasses runtime. I also ran the app in the Even Hub simulator.
+**Testing.** 114 automated tests cover the parser, the state machine, the backend over HTTP, voice capture, the AI paths, new message alerts and the glasses runtime. I also ran the app in the Even Hub simulator.
 
 ## What existed before Nov 23
 Nothing. The app was written during the hackathon. Before that there was only a one-page concept brief. Open-source libraries used: Even Hub SDK, Vite, TypeScript and Vitest.
