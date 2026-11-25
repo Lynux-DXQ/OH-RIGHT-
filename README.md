@@ -5,6 +5,7 @@ Catch it. Prep it. Send it. A voice-first daily assistant for Even Realities G2 
 - **Catch it**: say "remind me to get milk at six". The glasses show the task and time. You confirm, and a Telegram reminder is scheduled.
 - **Prep it**: say "what is next?". You get your next calendar event with a one-line prep note.
 - **Send it**: pick a Telegram chat, review a one-line summary and an AI draft, speak a change if you want one, then Send or Cancel. Nothing is sent without an explicit tap on Send.
+- **New message alerts**: while you are on the home menu, a new Telegram message shows as a short card (tap to reply, double tap to dismiss). The app checks the backend every 8 seconds, with no AI call, and an alert never interrupts a task in progress. Verified against the backend feed with live Telegram; the card itself is covered by state-machine tests, not yet by a live simulator run.
 
 Gestures: scroll to move, tap to choose, double tap to go back or cancel, hold (or tap) to speak.
 
@@ -60,12 +61,12 @@ If you build with `VITE_APP_TOKEN`, that token is readable by anyone who unpacks
 
 ## Tests
 
-`npm test` runs 87 tests: the time/intent parser, the state machine, the backend over HTTP, Telegram pairing and store recovery, the LLM paths against a fake OpenAI-compatible API, voice capture (hold to talk, tap to talk, too-short audio, silence, speech-service outage, cancel) and the runtime against a fake glasses bridge.
+`npm test` runs 110 tests: the time/intent parser, the state machine, the backend over HTTP, Telegram pairing and store recovery, the LLM paths against a fake OpenAI-compatible API, voice capture (hold to talk, tap to talk, too-short audio, silence, speech-service outage, cancel) and the runtime against a fake glasses bridge.
 
 ## Voice
 
-The glasses microphone sends 16 kHz, 16-bit mono PCM frames. The app buffers them while you hold (or tap) to talk, wraps them in a WAV and posts them to `/api/stt`, which forwards them to any OpenAI-compatible `/audio/transcriptions` endpoint. The transcript then goes to the parser. Tests check that the uploaded bytes are exactly what the microphone sent. I also ran synthesized speech through a real recognizer (Windows speech recognition), which routed "what is next" and "messages to reply to" correctly and turned "remind me to get milk at six" into a reminder. Whisper accuracy with a real G2 microphone is untested.
+The glasses microphone sends 16 kHz, 16-bit mono PCM frames. The app buffers them while you hold (or tap) to talk, wraps them in a WAV and posts them to `/api/stt`, which forwards them to any OpenAI-compatible `/audio/transcriptions` endpoint. The transcript then goes to the parser. Tests check that the uploaded bytes are exactly what the microphone sent. I also ran synthesized speech through a real recognizer (Windows speech recognition), which routed "what is next" and "messages to reply to" correctly and turned "remind me to get milk at six" into a reminder. I then ran recorded speech through Groq Whisper (`whisper-large-v3-turbo`), which returned "Remind me to get milk at 6.", "What is next?" and "Do I have any messages to reply to?". Whisper accuracy with a real G2 microphone is untested.
 
 ## Not verified yet
 
-Real G2 hardware, real Telegram delivery and live speech-to-text need your keys and device. They are untested here. The simulator run covered Prep it, Send it, hold-to-speak and error recovery in demo mode.
+Verified outside the simulator: real Telegram delivery in both directions (bot pairing, a reminder, and a group reply), AI summaries and drafts through OpenRouter, and Whisper transcription of recorded speech. Not verified: physical G2 hardware (microphone format, event types) and live calendar. The simulator run covered Prep it, Send it, hold-to-speak and error recovery in demo mode.

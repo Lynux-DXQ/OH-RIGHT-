@@ -12,6 +12,7 @@ beforeAll(async () => {
   process.env.STORE_FILE = join(mkdtempSync(join(tmpdir(), 'ohright-')), 'store.json');
   delete process.env.TELEGRAM_BOT_TOKEN;
   delete process.env.LLM_API_KEY;
+  delete process.env.STT_API_KEY;
   delete process.env.ICS_URL;
   delete process.env.APP_TOKEN;
   // @ts-expect-error plain JS module
@@ -104,5 +105,24 @@ describe('backend in demo mode', () => {
   it('stt is cleanly unavailable without a key', async () => {
     const res = await fetch(base + '/api/stt', { method: 'POST', body: new Uint8Array(5000) });
     expect(res.status).toBe(501);
+  });
+});
+
+describe('push alert feed', () => {
+  it('is empty in demo mode and reports only new unread messages when Telegram is on', async () => {
+    expect(await (await post('/api/alerts', { since: 0 })).json()).toEqual({ alerts: [] });
+    process.env.TELEGRAM_BOT_TOKEN = 'test-token';
+    try {
+      // @ts-expect-error plain JS module
+      const { _ingestForTests } = await import('../server/telegram.mjs');
+      const at = Date.now();
+      _ingestForTests({ chat: { id: -900, type: 'group', title: 'Alert group' }, from: { first_name: 'Ada' }, text: 'Can you confirm the time?', date: at / 1000 });
+      const first = await (await post('/api/alerts', { since: at - 1000 })).json();
+      expect(first.alerts).toHaveLength(1);
+      expect(first.alerts[0]).toMatchObject({ threadId: '-900', name: 'Alert group', from: 'Ada', text: 'Can you confirm the time?' });
+      expect((await (await post('/api/alerts', { since: first.alerts[0].at })).json()).alerts).toEqual([]);
+    } finally {
+      delete process.env.TELEGRAM_BOT_TOKEN;
+    }
   });
 });

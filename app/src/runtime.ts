@@ -14,7 +14,7 @@ import {
 } from '@evenrealities/even_hub_sdk';
 import { api } from './api';
 import { pcmToWav } from './audio';
-import { beginTyped, initialState, onTranscript, reduce, type Effect, type Input, type State } from './machine';
+import { beginTyped, initialState, onTranscript, reduce, type Alert, type Effect, type Input, type State } from './machine';
 import { render, type Layout } from './render';
 
 const MAX_RECORD_MS = 15000;
@@ -41,7 +41,35 @@ export class Runtime {
   private lastGesture = { key: '', at: 0 };
   private ids = new Map<string, string>();
 
+  private alertSince = Date.now();
+  private pendingAlerts: Alert[] = [];
+  private alertTimer: ReturnType<typeof setInterval> | null = null;
+  private expireTimer: ReturnType<typeof setTimeout> | null = null;
+
   get inGlasses() { return this.bridge !== null; }
+
+  startAlerts(everyMs = 8000) {
+    if (this.alertTimer) return;
+    this.alertTimer = setInterval(() => void this.checkAlerts(), everyMs);
+  }
+
+  async checkAlerts() {
+    try {
+      const { alerts } = await api.alerts(this.alertSince);
+      for (const a of alerts) {
+        this.alertSince = Math.max(this.alertSince, a.at);
+        this.pendingAlerts = [...this.pendingAlerts.filter((p) => p.threadId !== a.threadId), a];
+      }
+    } catch {
+      return;
+    }
+    const next = this.pendingAlerts[0];
+    if (!next || this.state.screen.t !== 'home') return;
+    this.pendingAlerts.shift();
+    this.dispatch({ k: 'alert', a: next });
+    if (this.expireTimer) clearTimeout(this.expireTimer);
+    this.expireTimer = setTimeout(() => this.dispatch({ k: 'alertExpire' }), 25000);
+  }
 
   subscribe(fn: Listener) {
     this.listeners.add(fn);

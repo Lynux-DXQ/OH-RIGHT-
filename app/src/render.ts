@@ -92,6 +92,14 @@ export function render(s: Screen): Layout {
         footer: options(DRAFT_OPTIONS, s.sel),
       };
 
+    case 'alert':
+      return {
+        kind: 'text',
+        header: 'New message  ·  ' + clip(s.a.name, 20),
+        body: clip(s.a.from, 30) + ':\n' + wrap(s.a.text, COLS, 5).join('\n'),
+        footer: 'Tap to reply  ·  Double tap to dismiss',
+      };
+
     case 'done':
       return { kind: 'text', header: s.title, body: wrap(s.detail).join('\n'), footer: 'Tap to finish' };
 

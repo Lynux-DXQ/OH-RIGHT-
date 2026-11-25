@@ -69,5 +69,5 @@ async function refreshHealth() {
   }
 }
 
-void rt.start();
+void rt.start().then(() => rt.startAlerts());
 void refreshHealth();

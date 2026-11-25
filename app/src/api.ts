@@ -1,4 +1,4 @@
-import type { Draft, EventCard, Intent, Reminder, Thread } from './machine';
+import type { Alert, Draft, EventCard, Intent, Reminder, Thread } from './machine';
 
 const KEY = 'ohright.api';
 const TOKEN_KEY = 'ohright.token';
@@ -42,6 +42,7 @@ export const api = {
   saveReminder: (r: Reminder, id: string) => call<{ scheduled: boolean }>('/api/reminders', { ...r, id }),
   next: () => call<{ event: EventCard | null }>('/api/next', clock()),
   threads: () => call<{ threads: Thread[] }>('/api/threads', {}),
+  alerts: (since: number) => call<{ alerts: (Alert & { at: number })[] }>('/api/alerts', { since }, undefined, 8000),
   draft: (threadId: string, instruction?: string, previousDraft?: string) => call<Draft>('/api/draft', { threadId, instruction, previousDraft }),
   send: (threadId: string, text: string, id: string) => call<{ sent: boolean; name: string }>('/api/send', { threadId, text, id, confirmed: true }),
 };

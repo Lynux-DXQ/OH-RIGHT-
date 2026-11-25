@@ -127,3 +127,28 @@ describe('render', () => {
     for (const line of wrap('a very long sentence '.repeat(30), 20, 50)) expect(line.length).toBeLessThanOrEqual(20);
   });
 });
+
+describe('push alerts', () => {
+  const a = { threadId: '77', name: 'Mum', from: 'Mum', text: 'Are you coming?' };
+  it('shows a new message alert only from the home screen', () => {
+    expect(reduce(initialState(), { k: 'alert', a }).state.screen).toMatchObject({ t: 'alert', a });
+    const busy: State = { screen: { t: 'busy', label: 'Sending', purpose: 'any', back: { t: 'home', sel: 0 } } };
+    expect(reduce(busy, { k: 'alert', a }).state).toBe(busy);
+    const draft = feed(initialState(), { k: 'alert', a }, { k: 'click', at: T }).state;
+    expect(reduce(draft, { k: 'alert', a }).state).toBe(draft);
+  });
+  it('tap drafts a reply, double tap and expiry dismiss, nothing is sent', () => {
+    const shown = reduce(initialState(), { k: 'alert', a }).state;
+    const tap = reduce(shown, { k: 'click', at: T });
+    expect(tap.effects).toEqual([{ e: 'draft', thread: expect.objectContaining({ id: '77' }), items: [expect.objectContaining({ id: '77' })] }]);
+    expect(reduce(shown, { k: 'double', at: T }).state.screen.t).toBe('home');
+    expect(reduce(shown, { k: 'alertExpire' }).state.screen.t).toBe('home');
+    expect(reduce(initialState(), { k: 'alertExpire' }).state.screen.t).toBe('home');
+  });
+  it('renders the sender and text', () => {
+    const l = render({ t: 'alert', a });
+    expect(l.header).toContain('Mum');
+    expect(l.body).toContain('Are you coming?');
+    expect(l.footer).toContain('dismiss');
+  });
+});

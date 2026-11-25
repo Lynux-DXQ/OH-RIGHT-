@@ -4,6 +4,7 @@ export type Reminder = { title: string; whenISO: string; whenLabel: string };
 export type EventCard = { title: string; whenLabel: string; startsInLabel: string; where: string; attendees: string; prep: string };
 export type Thread = { id: string; name: string; unread: number; summary: string };
 export type Draft = { threadId: string; name: string; summary: string; text: string };
+export type Alert = { threadId: string; name: string; from: string; text: string };
 export type Intent = { type: 'reminder'; reminder: Reminder } | { type: 'next' } | { type: 'reply' } | { type: 'unknown' };
 
 export type Screen =
@@ -15,6 +16,7 @@ export type Screen =
   | { t: 'meeting'; ev: EventCard | null }
   | { t: 'threads'; items: Thread[]; idx: number }
   | { t: 'draft'; d: Draft; sel: number; items: Thread[] }
+  | { t: 'alert'; a: Alert }
   | { t: 'done'; title: string; detail: string }
   | { t: 'error'; msg: string; retry: Effect | null; sel: number };
 
@@ -37,6 +39,8 @@ export type Input =
   | { k: 'transcript'; text: string; at: number }
   | { k: 'intent'; intent: Intent; at: number }
   | { k: 'event'; ev: EventCard | null }
+  | { k: 'alert'; a: Alert }
+  | { k: 'alertExpire' }
   | { k: 'threads'; items: Thread[] }
   | { k: 'drafted'; d: Draft; items: Thread[] }
   | { k: 'saved'; r: Reminder }
@@ -69,6 +73,8 @@ export function reduce(state: State, input: Input): R {
   const stay: R = { state, effects: [] };
 
   if (input.k === 'fail') return to({ t: 'error', msg: input.msg, retry: input.retry, sel: 0 });
+  if (input.k === 'alert') return s.t === 'home' ? to({ t: 'alert', a: input.a }) : stay;
+  if (input.k === 'alertExpire') return s.t === 'alert' ? to(HOME) : stay;
 
   if (s.t === 'busy') {
     switch (input.k) {
@@ -150,6 +156,14 @@ export function reduce(state: State, input: Input): R {
       if (input.k === 'click') {
         const thread = s.items[s.idx];
         return to({ t: 'busy', label: 'Drafting a reply', purpose: 'any', back: HOME }, { e: 'draft', thread, items: s.items });
+      }
+      return stay;
+
+    case 'alert':
+      if (input.k === 'double') return to(HOME);
+      if (input.k === 'click') {
+        const thread = { id: s.a.threadId, name: s.a.name, unread: 1, summary: '' };
+        return to({ t: 'busy', label: 'Drafting a reply', purpose: 'any', back: HOME }, { e: 'draft', thread, items: [thread] });
       }
       return stay;
 

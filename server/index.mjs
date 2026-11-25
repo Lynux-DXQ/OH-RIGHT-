@@ -127,6 +127,19 @@ const routes = {
     return { threads: items, demo: !telegramEnabled() };
   },
 
+  'POST /api/alerts': async (req) => {
+    const since = Number((await readJson(req)).since) || 0;
+    if (!telegramEnabled()) return { alerts: [] };
+    const alerts = allThreads()
+      .filter((t) => t.unread > 0 && t.messages.at(-1).at > since)
+      .map((t) => {
+        const m = t.messages.at(-1);
+        return { threadId: t.id, name: t.name.slice(0, 28), from: String(m.from).slice(0, 28), text: String(m.text).slice(0, 160), at: m.at };
+      })
+      .sort((a, b) => a.at - b.at);
+    return { alerts };
+  },
+
   'POST /api/draft': async (req) => {
     const body = await readJson(req);
     const t = allThreads().find((x) => x.id === String(body.threadId));

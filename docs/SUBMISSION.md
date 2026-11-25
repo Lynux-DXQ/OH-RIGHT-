@@ -3,46 +3,71 @@
 ## Project name
 OH, RIGHT!
 
-## Tagline (one line)
-Catch it. Prep it. Send it: a voice-first daily assistant for Even G2 that handles reminders, meeting prep and Telegram replies without a phone check.
+## Tagline
+Catch it. Prep it. Send it. A voice-first assistant for Even G2 glasses that handles reminders, meeting prep and Telegram replies without taking your phone out.
 
 ## Track
 04 - AI Assistants & Work
-Also enter: Special prize - Best Telegram integration
+Also entering: Special prize - Best Telegram integration
 
 ## Links
 - Code: https://github.com/Lynux-DXQ/OH-RIGHT-
-- Demo video (1:02): upload oh-right-demo.mp4 to YouTube (unlisted is fine) or Loom, then paste the link here
+- Demo video (1:10): upload oh-right-demo-v2.mp4 to YouTube (unlisted is fine) or Loom, then paste the link here
 
-## Short description (problem, who it is for, how it works)
+## Description
 
-**Problem.** The small things that fall through a busy day cost a phone check each: the errand you remembered with full hands, the thing you wanted to know before a meeting, the message that needs a thoughtful answer. Every check pulls you out of what you were doing.
+**The problem.** Most of what slips through a busy day is small: the errand you thought of while carrying bags, the thing you wanted to check before a meeting, the message that needs an answer. Each one costs a phone check, and each check pulls you out of whatever you were doing.
 
-**Who it is for.** Anyone who is on the move, in meetings or has their hands full and uses Telegram and a calendar every day.
+**Who it is for.** Anyone who is often on the move, in meetings or has their hands full, and who uses Telegram and a calendar every day.
 
-**What it does.** OH, RIGHT! shows one thing at a time on the G2 display and lets you act in seconds. You always see what will happen before it happens.
-- **Remember something (catch it).** Say "remind me to get milk at six". The glasses show "Save this reminder?" with the task and time. You tap Save, and a Telegram reminder is scheduled for that time.
-- **What is next? (prep it).** You get your next calendar event with a one-line prep note, so you walk in oriented.
-- **Reply to a chat (send it).** One line says who needs you. An AI drafts a reply. You can speak a change ("say yes, I'll bring dessert"), then choose Send. Nothing is sent without that tap.
+**What it does.** OH, RIGHT! shows one short card at a time on the G2 display. You act on it in a few seconds, and you always see what will happen before it happens.
 
-**How it works.** A TypeScript and Vite web app uses the Even Hub SDK to draw short cards on the 576x288 display and read taps, scrolls and long presses. The glasses microphone audio (16 kHz PCM) goes to a small Node backend, which does speech-to-text (OpenAI Whisper or Groq), parses the command, schedules reminders, reads Google Calendar through a secret iCal feed, and talks to Telegram through a bot. An OpenAI-compatible model (OpenAI or OpenRouter) writes summaries, drafts and prep notes. The phone-side page mirrors the glasses screen and has a typed-input fallback.
+- **Catch it.** Say "remind me to get milk at six". The glasses show "Save this reminder?" with the task and the time. Tap Save and a reminder is scheduled. When it is due, it arrives on Telegram.
+- **Prep it.** Ask "what is next?" and you get your next calendar event with a one-line note, such as an open item you owe someone.
+- **Send it.** A card tells you who messaged you and what they said. An AI writes a draft reply. You can change it by voice ("say yes, I'll bring dessert"), then choose Send. Nothing goes out without that tap.
+- **New message alerts.** While you are on the home menu, a new Telegram message pops up as a short card. Tap to reply or double tap to dismiss. If you are in the middle of something else, the alert waits.
 
-**Trust and safety.** Sends and reminders need an explicit tap. Chat text is treated as untrusted data in prompts. Sends and reminders are idempotent. The backend binds to localhost, rejects foreign browser origins, and refuses a public address without a token. Keys live only on the server. Telegram messages are held in memory for 60 minutes.
+## Why it helps in everyday life
 
-**Quality.** 87 automated tests cover the parser, the state machine, the backend over HTTP, voice capture, the AI paths and the runtime. I ran it in the Even Hub simulator and tested the voice path with real synthesized speech.
+Think about the moments when you cannot reach for your phone: carrying shopping, cooking, cycling, walking into a meeting, holding a child. Those are the moments when you think "oh, right!" and then forget again by the time your hands are free.
+
+- **Capture while it is fresh.** A reminder takes one spoken sentence and one tap, so the thought is saved before it fades.
+- **Walk into meetings prepared.** You see the next event and the one thing you owe someone, without opening a calendar.
+- **Answer people without the phone trap.** Checking a phone for one message often turns into ten minutes of scrolling. The glasses show only the message you need and a ready draft, so you reply and carry on.
+- **No surprises.** The app never sends or schedules anything without a tap from you, so you can trust it while busy.
+- **Fits the tools you already use.** It works with Telegram and your existing calendar. There is nothing new to learn or move to.
+
+## How it works
+
+The glasses app is written in TypeScript with Vite and the Even Hub SDK. It draws cards on the 576x288 display and reads taps, scrolls and long presses. Microphone audio (16 kHz PCM) goes to a small Node.js backend. The backend transcribes it with Whisper (Groq or OpenAI), works out what you asked for, schedules reminders, reads the calendar from a private iCal link, and talks to Telegram through a bot. A language model (OpenAI or OpenRouter) writes the summaries, drafts and meeting notes. A companion page on the phone mirrors the glasses screen and accepts typed input as a fallback.
+
+**Safety.** Sends and reminders always need a tap. Chat text is treated as untrusted input in the prompts. Repeated requests are not duplicated. The backend listens on localhost by default, rejects unknown browser origins and refuses to run on a public address without a token. API keys stay on the server. Telegram messages are kept in memory for 60 minutes.
+
+**Testing.** 110 automated tests cover the parser, the state machine, the backend over HTTP, voice capture, the AI paths, new message alerts and the glasses runtime. I also ran the app in the Even Hub simulator.
 
 ## What existed before Nov 23
-Nothing. The app was written during the hackathon (Nov 25 onward). Before that there was only a one-page concept brief. Open-source libraries used: Even Hub SDK, Vite, TypeScript, Vitest.
+Nothing. The app was written during the hackathon. Before that there was only a one-page concept brief. Open-source libraries used: Even Hub SDK, Vite, TypeScript and Vitest.
 
 ## Tech stack
-TypeScript, Vite, Even Hub SDK, Node.js (no runtime dependencies on the backend), Telegram Bot API, Google Calendar (secret iCal feed), OpenAI-compatible LLM and Whisper-compatible speech-to-text (OpenAI, OpenRouter, Groq).
+TypeScript, Vite, Even Hub SDK, Node.js (no runtime dependencies on the backend), Telegram Bot API, iCal calendar feed, OpenAI-compatible language model (OpenRouter), Whisper speech-to-text (Groq).
 
-## Honest status
-Verified: simulator run, 87 tests, real speech through a real recognizer. Not yet verified on physical G2 hardware, and live Telegram, calendar and Whisper need the owner's keys. The video uses sample calendar and chat data and typed commands, which stand in for voice in the simulator.
+## Current status
+What I have tested:
+- The app in the Even Hub simulator.
+- Real Telegram in both directions: pairing, a delivered reminder, and group messages received and answered.
+- AI summaries and drafts through OpenRouter.
+- Groq Whisper transcribing recorded speech.
+- Alerts for new group messages, through the backend feed.
 
-## Feature requests (up to 5 things the tools were missing)
-1. **Even Hub SDK: no voice activity or end-of-speech event, and no built-in speech-to-text.** Every app has to buffer raw PCM, guess when you stopped, and run its own transcription server. A built-in transcript or an end-of-speech event would make voice apps much simpler.
-2. **Even Hub: an app cannot show anything when it is not in the foreground.** Reminders had to be delivered through Telegram instead of the glasses. A way to post a short, user-approved alert would fit reminders.
-3. **Telegram Bot API: a bot cannot read a user's existing chats.** It only sees messages sent to it, and groups need privacy mode off. A personal "reply to my chats" glance needs user-account access, which is outside the Bot API. A scoped, read-only option for chats the user picks would help.
-4. **Google sign-in does not work inside the WebView.** Reading a live Google Calendar needs OAuth, so I used a secret iCal feed, which does not expand recurring events. A first-party pairing-code sign-in flow for WebView apps would unlock proper calendar access.
-5. **Even Hub simulator: no way to inject microphone audio.** It only reads a live microphone device. An automation endpoint that accepts PCM would let developers test voice flows in CI.
+What I have not tested:
+- Physical G2 glasses (the microphone format and real device events).
+- A live calendar feed.
+
+The demo video uses sample calendar and chat data, and typed commands stand in for voice in the simulator.
+
+## Feature requests (up to 5)
+1. **Even Hub SDK: speech-to-text and end-of-speech detection.** Apps have to buffer raw audio, guess when you stopped talking, and run their own transcription server. A built-in transcript or an end-of-speech event would make voice apps much simpler.
+2. **Even Hub: alerts when the app is not in the foreground.** Reminders had to go through Telegram because an app cannot show anything while it is not running. A way to post a short, user-approved alert to the glasses would suit reminders.
+3. **Telegram Bot API: bots cannot read a user's existing chats.** A bot only sees messages sent to it or to groups it is in, and groups need privacy mode switched off. A read-only option for chats the user chooses would allow a true "reply to my chats" experience.
+4. **Google sign-in does not work inside the WebView.** Reading a live Google Calendar needs OAuth, so I used a private iCal link, which does not expand recurring events. A pairing-code sign-in flow for WebView apps would allow proper calendar access.
+5. **Even Hub simulator: no way to inject microphone audio.** It only reads a live microphone. An endpoint that accepts audio would let developers test voice flows automatically.
