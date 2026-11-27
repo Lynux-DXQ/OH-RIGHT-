@@ -187,3 +187,31 @@ describe('voice notes, threaded replies and business hardening', () => {
     }
   });
 });
+
+describe('assistant in demo mode', () => {
+  it('saves a booking once with a reminder and never claims it was reserved', async () => {
+    const body = { id: 'test-booking-1', kind: 'flight', title: 'Lagos to London', where: 'LOS-LHR', notes: '', whenISO: new Date(Date.now() + 86400000).toISOString() };
+    const first = await (await post('/api/bookings', body)).json();
+    expect(first).toMatchObject({ id: 'test-booking-1', reserved: false });
+    expect(first.note).toContain('Nothing was reserved');
+    expect((await (await post('/api/bookings', body)).json()).duplicate).toBe(true);
+    expect((await post('/api/bookings', { ...body, id: 'x', kind: 'spaceship' })).status).toBe(400);
+  });
+
+  it('sends booking requests to the model instead of saving them as reminders', async () => {
+    const parsed = await (await post('/api/parse', { text: 'book a table for two at seven at Olive and Co', now: Date.now(), offsetMin: 0 })).json();
+    expect(parsed.intent.type).toBe('unknown');
+  });
+
+  it('questions need an AI key and say so', async () => {
+    const res = await post('/api/ask', { question: 'What is 2 plus 2?' });
+    expect(res.status).toBe(501);
+    expect((await res.json()).error).toContain('LLM_API_KEY');
+  });
+
+  it('research falls back to the calendar card without an AI key', async () => {
+    const brief = await (await post('/api/research', { now: Date.now(), offsetMin: 0 })).json();
+    expect(brief.title).toMatch(/^Brief: /);
+    expect(brief.text).toContain('Full research needs an AI key');
+  });
+});

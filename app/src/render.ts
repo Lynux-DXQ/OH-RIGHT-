@@ -1,4 +1,7 @@
-import { draftOptions, HOME_ITEMS, REMINDER_OPTIONS, SNOOZE_MINUTES, type Screen } from './machine';
+import { BOOKING_KINDS, BOOKING_OPTIONS, draftOptions, HOME_ITEMS, REMINDER_OPTIONS, SNOOZE_MINUTES, type Screen } from './machine';
+import { COLS, wrap } from './text';
+
+export { wrap } from './text';
 
 export type Layout = {
   kind: 'text' | 'list';
@@ -7,29 +10,6 @@ export type Layout = {
   footer: string;
   list?: string[];
 };
-
-const COLS = 40;
-const BODY_LINES = 8;
-
-export function wrap(text: string, cols = COLS, maxLines = BODY_LINES): string[] {
-  const out: string[] = [];
-  for (const para of String(text).split('\n')) {
-    let line = '';
-    for (const word of para.split(/\s+/).filter(Boolean)) {
-      const w = word.length > cols ? word.slice(0, cols - 1) + '…' : word;
-      if (!line) line = w;
-      else if ((line + ' ' + w).length <= cols) line += ' ' + w;
-      else { out.push(line); line = w; }
-    }
-    out.push(line);
-  }
-  if (out.length > maxLines) {
-    const cut = out.slice(0, maxLines);
-    cut[maxLines - 1] = cut[maxLines - 1].slice(0, cols - 1) + '…';
-    return cut;
-  }
-  return out;
-}
 
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 
@@ -41,6 +21,7 @@ export function render(s: Screen, unread = 0): Layout {
       return { kind: 'list', header: 'OH, RIGHT!', body: '', list: HOME_ITEMS.map((l, i) => (i === 2 && unread > 0 ? l + '  (' + unread + ' new)' : l)), footer: 'Scroll, then tap  ·  Hold to speak' };
 
     case 'prompt':
+      if (s.purpose === 'question') return { kind: 'text', header: 'Ask a question', body: 'Tap, then ask it out loud.\n\nFor example:\n"What is a good opener for a sales call?"', footer: 'Tap to talk  ·  Double tap to go back' };
       return {
         kind: 'text',
         header: 'Remember something',
@@ -101,6 +82,17 @@ export function render(s: Screen, unread = 0): Layout {
         header: 'New message  ·  ' + clip(s.a.name, 20),
         body: clip(s.a.from, 30) + ':\n' + wrap(s.a.text, COLS, 5).join('\n'),
         footer: 'Tap to reply  ·  Double tap to dismiss',
+      };
+
+    case 'brief':
+      return { kind: 'text', header: clip(s.title, COLS), body: s.pages[s.page], footer: (s.pages.length > 1 ? 'Scroll ' + (s.page + 1) + ' of ' + s.pages.length + '  ·  ' : '') + 'Tap to finish' };
+
+    case 'booking':
+      return {
+        kind: 'text',
+        header: 'Book this?',
+        body: clip(BOOKING_KINDS[s.b.kind] + '  ·  ' + s.b.title, COLS) + '\n' + clip(s.b.whenLabel + (s.b.where ? '  ·  ' + s.b.where : ''), COLS) + '\n\n' + wrap(s.b.notes || 'No notes', COLS, 3).join('\n'),
+        footer: options(BOOKING_OPTIONS, s.sel),
       };
 
     case 'done':

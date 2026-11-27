@@ -1,4 +1,4 @@
-import type { Alert, Draft, EventCard, Intent, Reminder, Thread } from './machine';
+import type { Alert, Booking, Brief, Draft, EventCard, Intent, Reminder, Thread } from './machine';
 
 const KEY = 'ohright.api';
 const TOKEN_KEY = 'ohright.token';
@@ -45,5 +45,8 @@ export const api = {
   alerts: (since: number) => call<{ alerts: (Alert & { at: number })[]; unread: number }>('/api/alerts', { since }, undefined, 8000),
   snooze: (id: string, minutes: number) => call<{ snoozed: boolean }>('/api/snooze', { id, minutes }),
   draft: (threadId: string, instruction?: string, previousDraft?: string) => call<Draft>('/api/draft', { threadId, instruction, previousDraft }),
+  ask: (question: string) => call<Brief>('/api/ask', { question }),
+  research: () => call<Brief>('/api/research', clock()),
+  saveBooking: (b: Booking, id: string) => call<{ id: string; reserved: boolean }>('/api/bookings', { ...b, id }),
   send: (threadId: string, text: string, id: string) => call<{ sent: boolean; name: string }>('/api/send', { threadId, text, id, confirmed: true }),
 };

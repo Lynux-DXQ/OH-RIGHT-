@@ -15,17 +15,37 @@ if (existsSync(envFile)) {
 const { store } = await import('./store.mjs');
 const { parseIntent, formatWhen } = await import('./nlu.mjs');
 const { chatJson, llmEnabled, sttEnabled, transcribe } = await import('./llm.mjs');
+const { askCompanion, researchMeeting, searchEnabled } = await import('./assistant.mjs');
 const { nextEvent } = await import('./calendar.mjs');
 const { demoThreads, summarise, draftReply } = await import('./replies.mjs');
 const { telegramEnabled, recentThreads, markRead, sendTelegram, startPolling } = await import('./telegram.mjs');
 
 const PORT = Number(process.env.PORT || 8787);
 const MAX_ATTEMPTS = 5;
+const BOOKING_KINDS_LABEL = { meeting: 'Meeting', appointment: 'Appointment', flight: 'Flight', hotel: 'Hotel', restaurant: 'Restaurant table' };
+const BOOKING_KINDS = Object.keys(BOOKING_KINDS_LABEL);
 const demoState = demoThreads();
 const sentIds = new Map();
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
+}
+
+function addReminder(body) {
+  const dueAt = Date.parse(body.whenISO);
+  const title = String(body.title || '').trim().slice(0, 120);
+  if (!title || !Number.isFinite(dueAt)) throw new HttpError(400, 'title and whenISO are required');
+  const id = String(body.id || randomUUID());
+  const existing = store.data.reminders.find((r) => r.id === id);
+  if (existing) {
+    if (existing.title !== title || existing.dueAt !== dueAt) throw new HttpError(409, 'That reminder id is already used');
+    return { id, scheduled: true, duplicate: true };
+  }
+  if (store.data.reminders.filter((r) => !r.delivered && !r.failed).length >= 200) throw new HttpError(429, 'Too many pending reminders');
+  store.data.reminders.push({ id, title, dueAt, attempts: 0, delivered: false, failed: false });
+  store.data.reminders = store.data.reminders.filter((r) => !(r.delivered || r.failed) || Date.now() - r.dueAt < 7 * 86400000).slice(-500);
+  store.save();
+  return { id, scheduled: true, delivery: telegramEnabled() ? (store.data.ownerChatId ? 'telegram' : 'pending-pairing') : 'demo' };
 }
 
 function allThreads() {
@@ -58,11 +78,16 @@ const clientTime = (body) => ({
 
 async function llmIntent(text, now, offsetMin) {
   const out = await chatJson(
-    'Classify a spoken command for a glasses assistant. Reply as JSON: {"type":"reminder"|"next"|"reply"|"unknown","title":string,"whenISO":string|null}. "reminder" = save a task/reminder (title is short imperative, whenISO is a UTC ISO time in the future or null). "next" = asks about next meeting or schedule. "reply" = wants to read or answer messages. Current UTC time: ' + new Date(now).toISOString() + ', user UTC offset minutes: ' + offsetMin + '.',
+    'Classify a spoken command for a glasses assistant. Reply as JSON: {"type":"reminder"|"next"|"reply"|"ask"|"research"|"book"|"unknown","title":string,"whenISO":string|null,"question":string|null,"kind":"meeting"|"appointment"|"flight"|"hotel"|"restaurant"|null,"where":string|null,"notes":string|null}. "reminder" = save a task/reminder (title is short imperative, whenISO is a UTC ISO time in the future or null). "next" = asks about next meeting or schedule. "reply" = wants to read or answer messages. "ask" = a general question to answer (question is the question). "research" = wants a briefing on the next meeting or the company they meet. "book" = wants a meeting, appointment, flight, hotel or restaurant booking (title is a short description, whenISO the requested time, where the place or route, notes any extra detail). Current UTC time: ' + new Date(now).toISOString() + ', user UTC offset minutes: ' + offsetMin + '.',
     text.slice(0, 400),
   );
   if (!out) return null;
-  if (out.type === 'next' || out.type === 'reply') return { type: out.type };
+  if (out.type === 'next' || out.type === 'reply' || out.type === 'research') return { type: out.type };
+  if (out.type === 'ask' && out.question) return { type: 'ask', question: String(out.question).slice(0, 400) };
+  if (out.type === 'book' && out.title && BOOKING_KINDS.includes(out.kind)) {
+    const ms = out.whenISO && Date.parse(out.whenISO) > now ? Date.parse(out.whenISO) : now + 3600000;
+    return { type: 'book', booking: { kind: out.kind, title: String(out.title).slice(0, 120), where: String(out.where || '').slice(0, 120), notes: String(out.notes || '').slice(0, 300), whenISO: new Date(ms).toISOString(), whenLabel: formatWhen(ms, now, offsetMin) + (out.whenISO ? '' : ' (default)') } };
+  }
   if (out.type === 'reminder' && out.title) {
     const ms = out.whenISO && Date.parse(out.whenISO) > now ? Date.parse(out.whenISO) : now + 3600000;
     return { type: 'reminder', reminder: { title: String(out.title).slice(0, 120), whenISO: new Date(ms).toISOString(), whenLabel: formatWhen(ms, now, offsetMin) + (out.whenISO ? '' : ' (default)') } };
@@ -90,6 +115,8 @@ const routes = {
     const { now, offsetMin } = clientTime(body);
     const text = String(body.text || '').slice(0, 400);
     let intent = parseIntent(text, { now, offsetMin });
+    if (/^\s*(research|brief me)\b/i.test(text)) intent = { type: 'research' };
+    else if (/^\s*(book|reserve)\b/i.test(text)) intent = { type: 'unknown' };
     if (intent.type === 'unknown' && text.trim() && llmEnabled()) {
       try { intent = (await llmIntent(text, now, offsetMin)) || intent; } catch (err) { console.error('[llm intent]', err.message); }
     }
@@ -98,20 +125,42 @@ const routes = {
 
   'POST /api/reminders': async (req) => {
     const body = await readJson(req);
-    const dueAt = Date.parse(body.whenISO);
+    return addReminder(body);
+  },
+
+  'POST /api/bookings': async (req) => {
+    const body = await readJson(req);
+    const kind = String(body.kind || '');
+    if (!BOOKING_KINDS.includes(kind)) throw new HttpError(400, 'Unknown booking kind');
+    const whenISO = Date.parse(body.whenISO);
     const title = String(body.title || '').trim().slice(0, 120);
-    if (!title || !Number.isFinite(dueAt)) throw new HttpError(400, 'title and whenISO are required');
-    const id = String(body.id || randomUUID());
-    const existing = store.data.reminders.find((r) => r.id === id);
-    if (existing) {
-      if (existing.title !== title || existing.dueAt !== dueAt) throw new HttpError(409, 'That reminder id is already used');
-      return { id, scheduled: true, duplicate: true };
-    }
-    if (store.data.reminders.filter((r) => !r.delivered && !r.failed).length >= 200) throw new HttpError(429, 'Too many pending reminders');
-    store.data.reminders.push({ id, title, dueAt, attempts: 0, delivered: false, failed: false });
-    store.data.reminders = store.data.reminders.filter((r) => !(r.delivered || r.failed) || Date.now() - r.dueAt < 7 * 86400000).slice(-500);
+    if (!title || !Number.isFinite(whenISO)) throw new HttpError(400, 'title and whenISO are required');
+    const id = String(body.id || randomUUID()).slice(0, 64);
+    const existing = store.data.bookings.find((b) => b.id === id);
+    if (existing) return { id, reserved: false, duplicate: true };
+    const booking = { id, kind, title, where: String(body.where || '').slice(0, 120), notes: String(body.notes || '').slice(0, 300), whenISO: new Date(whenISO).toISOString() };
+    addReminder({ id: id + '~booking', title: BOOKING_KINDS_LABEL[kind] + ': ' + title, whenISO: booking.whenISO });
+    store.data.bookings = [...store.data.bookings, booking].slice(-200);
     store.save();
-    return { id, scheduled: true, delivery: telegramEnabled() ? (store.data.ownerChatId ? 'telegram' : 'pending-pairing') : 'demo' };
+    return { id, reserved: false, note: kind === 'meeting' || kind === 'appointment' ? 'Saved with a reminder. It is not on your calendar yet.' : 'Saved with a reminder. Nothing was reserved: no booking provider is connected.' };
+  },
+
+  'POST /api/ask': async (req) => {
+    const body = await readJson(req);
+    const question = String(body.question || '').trim().slice(0, 400);
+    if (!question) throw new HttpError(400, 'Ask a question first');
+    if (!llmEnabled()) throw new HttpError(501, 'Questions need an AI key on the server (LLM_API_KEY).');
+    return { title: 'Answer', text: (await askCompanion(question)) || 'I could not come up with an answer. Try asking again.' };
+  },
+
+  'POST /api/research': async (req) => {
+    const { now, offsetMin } = clientTime(await readJson(req));
+    const { event } = await nextEvent(now, offsetMin);
+    if (!event) return { title: 'Meeting brief', text: 'Nothing else on your calendar, so there is no meeting to research.' };
+    if (!llmEnabled()) return { title: 'Brief: ' + event.title, text: 'Meeting: ' + event.title + '\n' + event.whenLabel + (event.where ? '\nWhere: ' + event.where : '') + '\n' + event.prep + '\n\nFull research needs an AI key on the server (LLM_API_KEY).' };
+    const brief = await researchMeeting(event);
+    const caveat = brief.live ? '' : '\n\n' + (searchEnabled() ? 'Live search found no sources for this, so' : 'No live web search is set up (SEARCH_API_KEY), so') + ' this is from general knowledge. Check the facts before you rely on them.';
+    return { title: brief.title, text: brief.text + caveat, sources: brief.sources };
   },
 
   'GET /api/reminders': async () => ({ reminders: store.data.reminders.slice(-50) }),
@@ -223,7 +272,7 @@ const server = createServer(async (req, res) => {
   } catch (err) {
     const status = err instanceof HttpError ? err.status : 502;
     if (!(err instanceof HttpError)) console.error('[' + path + ']', err);
-    send(status, { error: err instanceof HttpError ? err.message : 'Upstream service failed: ' + err.message });
+    send(status, { error: err instanceof HttpError ? err.message : 'Upstream service failed. Try again in a moment.' });
   }
 });
 

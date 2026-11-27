@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { beginTyped, draftOptions, initialState, onTranscript, reduce, type Input, type State, type Effect } from '../app/src/machine';
 import { render, wrap } from '../app/src/render';
+import { pages } from '../app/src/text';
 
 const T = 1_000_000;
 const feed = (state: State, ...inputs: Input[]) => {
@@ -115,6 +116,8 @@ describe('render', () => {
       { t: 'draft', d: { threadId: 'a', name: long, summary: long, text: long }, sel: 1, items: [] },
       { t: 'meeting', ev: { title: long, whenLabel: 'Today 6:00 PM', startsInLabel: 'in 5 min', where: long, attendees: '5 people', prep: long } },
       { t: 'error', msg: long, retry: null, sel: 0 },
+      { t: 'brief', title: long, pages: pages(long), page: 0 },
+      { t: 'booking', b: { kind: 'hotel', title: long, where: long, notes: long, whenISO: '', whenLabel: long }, sel: 0 },
     ] as const;
     for (const s of screens) {
       const l = render(s as never);
@@ -188,5 +191,55 @@ describe('other reply picker and spoken reminder edits', () => {
     const rem = { t: 'busy' as const, label: 'x', purpose: 'editReminder' as const, back: { t: 'reminder' as const, r: { title: 'call Sam', whenISO: '', whenLabel: 'Tomorrow 6:00 PM' }, sel: 1 } };
     expect(onTranscript({ screen: rem }, 'make it 7 pm').effects).toEqual([{ e: 'parse', text: 'remind me to call Sam at 7 pm' }]);
     expect(onTranscript({ screen: rem }, 'remind me to call Ann at 8').effects).toEqual([{ e: 'parse', text: 'remind me to call Ann at 8' }]);
+  });
+});
+
+describe('ask, research and book', () => {
+  const booking = { kind: 'restaurant' as const, title: 'Table for two', where: 'Olive & Co', notes: 'Vegetarian guest', whenISO: '2026-11-28T18:00:00.000Z', whenLabel: 'Tomorrow 7:00 PM' };
+
+  it('home items route to a question prompt and a meeting research', () => {
+    const q = feed(initialState(), { k: 'list', idx: 3, at: T });
+    expect(q.state.screen).toEqual({ t: 'prompt', purpose: 'question' });
+    const r = feed(initialState(), { k: 'list', idx: 4, at: T });
+    expect(r.effects).toEqual([{ e: 'research' }]);
+    expect(r.state.screen).toMatchObject({ t: 'busy', label: 'Researching' });
+  });
+
+  it('a spoken question is sent to ask, and the answer is paged on the glasses', () => {
+    const listening = feed(initialState(), { k: 'list', idx: 3, at: T }, { k: 'click', at: T }, { k: 'click', at: T + 2000 }).state;
+    const busy = onTranscript(listening, 'What is a good opener?');
+    expect(busy.effects).toEqual([{ e: 'ask', question: 'What is a good opener?' }]);
+    const shown = feed(busy.state, { k: 'brief', b: { title: 'Answer', text: 'Ask about their goals.\n' + 'word '.repeat(120) } }).state;
+    expect(shown.screen.t).toBe('brief');
+    if (shown.screen.t !== 'brief') return;
+    expect(shown.screen.pages.length).toBeGreaterThan(1);
+    const next = feed(shown, { k: 'down', at: T }).state;
+    expect(next.screen).toMatchObject({ t: 'brief', page: 1 });
+    expect(feed(next, ...Array.from({ length: 10 }, () => ({ k: 'down' as const, at: T }))).state.screen).toMatchObject({ t: 'brief', page: shown.screen.pages.length - 1 });
+  });
+
+  it('a booking asks for confirmation and only Save sends it', () => {
+    const busy = feed(initialState(), { k: 'list', idx: 0, at: T }, { k: 'click', at: T }, { k: 'click', at: T + 2000 }).state;
+    const confirm = feed(busy, { k: 'intent', intent: { type: 'book', booking }, at: T }).state;
+    expect(confirm.screen).toMatchObject({ t: 'booking', sel: 0 });
+    expect(render(confirm.screen).header).toBe('Book this?');
+    expect(render(confirm.screen).body).toContain('Restaurant table');
+    const cancelled = feed(confirm, { k: 'down', at: T }, { k: 'click', at: T });
+    expect(cancelled.effects).toEqual([]);
+    expect(cancelled.state.screen.t).toBe('home');
+    const saved = feed(confirm, { k: 'click', at: T });
+    expect(saved.effects).toEqual([{ e: 'saveBooking', b: booking }]);
+    const done = feed(saved.state, { k: 'bookingSaved', b: booking }).state;
+    expect(done.screen).toMatchObject({ t: 'done', title: 'Booking saved' });
+  });
+});
+
+describe('regressions from the audit', () => {
+  it('retrying a failed booking save keeps the saving guard on', () => {
+    const b = { kind: 'flight' as const, title: 'Lagos to London', where: '', notes: '', whenISO: '2026-11-28T18:00:00.000Z', whenLabel: 'Tomorrow 7:00 PM' };
+    const failed = feed(initialState(), { k: 'fail', msg: 'Server down', retry: { e: 'saveBooking', b } });
+    const retried = feed(failed.state, { k: 'click', at: T }, { k: 'click', at: T });
+    expect(retried.state.screen).toMatchObject({ t: 'busy', label: 'Saving' });
+    expect(feed(retried.state, { k: 'double', at: T }).state.screen).toMatchObject({ t: 'busy', label: 'Saving' });
   });
 });
