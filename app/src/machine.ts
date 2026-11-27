@@ -1,11 +1,22 @@
-export type Purpose = 'any' | 'reminder' | 'editReminder' | 'editDraft';
+export type Purpose = 'any' | 'reminder' | 'editReminder' | 'editDraft' | 'question';
 
 export type Reminder = { title: string; whenISO: string; whenLabel: string };
 export type EventCard = { title: string; whenLabel: string; startsInLabel: string; where: string; attendees: string; prep: string };
 export type Thread = { id: string; name: string; unread: number; summary: string };
 export type Draft = { threadId: string; name: string; summary: string; text: string; alts?: string[] };
 export type Alert = { kind: 'message'; threadId: string; name: string; from: string; text: string } | { kind: 'reminder'; id: string; title: string };
-export type Intent = { type: 'reminder'; reminder: Reminder } | { type: 'next' } | { type: 'reply' } | { type: 'unknown' };
+export type BookingKind = 'meeting' | 'appointment' | 'flight' | 'hotel' | 'restaurant';
+export type Booking = { kind: BookingKind; title: string; where: string; notes: string; whenISO: string; whenLabel: string };
+export type Brief = { title: string; text: string };
+
+export type Intent =
+  | { type: 'reminder'; reminder: Reminder }
+  | { type: 'next' }
+  | { type: 'reply' }
+  | { type: 'ask'; question: string }
+  | { type: 'research' }
+  | { type: 'book'; booking: Booking }
+  | { type: 'unknown' };
 
 export type Screen =
   | { t: 'home'; sel: number }
@@ -18,6 +29,8 @@ export type Screen =
   | { t: 'draft'; d: Draft; sel: number; items: Thread[] }
   | { t: 'alert'; a: Alert }
   | { t: 'done'; title: string; detail: string }
+  | { t: 'brief'; title: string; pages: string[]; page: number }
+  | { t: 'booking'; b: Booking; sel: number }
   | { t: 'error'; msg: string; retry: Effect | null; sel: number };
 
 export type State = { screen: Screen; unread?: number };
@@ -32,7 +45,10 @@ export type Effect =
   | { e: 'fetchNext' }
   | { e: 'fetchThreads' }
   | { e: 'draft'; thread: Thread; instruction?: string; previous?: string; items: Thread[] }
-  | { e: 'send'; d: Draft; items: Thread[] };
+  | { e: 'send'; d: Draft; items: Thread[] }
+  | { e: 'ask'; question: string }
+  | { e: 'research' }
+  | { e: 'saveBooking'; b: Booking };
 
 export type Input =
   | { k: 'click' | 'double' | 'up' | 'down' | 'press' | 'release'; at: number }
@@ -46,15 +62,21 @@ export type Input =
   | { k: 'threads'; items: Thread[] }
   | { k: 'drafted'; d: Draft; items: Thread[] }
   | { k: 'saved'; r: Reminder }
+  | { k: 'brief'; b: Brief }
+  | { k: 'bookingSaved'; b: Booking }
   | { k: 'sent'; name: string }
   | { k: 'timeout'; at: number }
   | { k: 'fail'; msg: string; retry: Effect | null };
 
-export const HOME_ITEMS = ['Remember something', 'What is next?', 'Reply to a chat'];
+export const HOME_ITEMS = ['Remember something', 'What is next?', 'Reply to a chat', 'Ask a question', 'Research my next meeting'];
 const REMINDER_INTERRUPTIBLE = ['home', 'done', 'meeting', 'error', 'prompt'];
 export const SNOOZE_MINUTES = 10;
 export const REMINDER_OPTIONS = ['Save', 'Change', 'Cancel'];
+export const BOOKING_OPTIONS = ['Save', 'Cancel'];
+export const BOOKING_KINDS: Record<BookingKind, string> = { meeting: 'Meeting', appointment: 'Appointment', flight: 'Flight', hotel: 'Hotel', restaurant: 'Restaurant table' };
 export const draftOptions = (d: Draft) => (d.alts?.length ? ['Send', 'Change', 'Other reply', 'Cancel'] : ['Send', 'Change', 'Cancel']);
+
+import { pages } from './text';
 
 const TAP_GUARD_MS = 700;
 
@@ -92,13 +114,16 @@ function step(state: State, input: Input): R {
 
   if (s.t === 'busy') {
     switch (input.k) {
-      case 'double': return s.label === 'Sending' || s.label === 'Scheduling' ? stay : to(HOME);
+      case 'double': return ['Sending', 'Scheduling', 'Saving'].includes(s.label) ? stay : to(HOME);
       case 'transcript': return stay;
       case 'intent': {
         const i = input.intent;
         if (i.type === 'reminder') return to({ t: 'reminder', r: i.reminder, sel: 0 });
         if (i.type === 'next') return to({ t: 'busy', label: 'Checking your calendar', purpose: 'any', back: HOME }, { e: 'fetchNext' });
         if (i.type === 'reply') return to({ t: 'busy', label: 'Reading your chats', purpose: 'any', back: HOME }, { e: 'fetchThreads' });
+        if (i.type === 'ask') return to({ t: 'busy', label: 'Thinking', purpose: 'any', back: HOME }, { e: 'ask', question: i.question });
+        if (i.type === 'research') return to({ t: 'busy', label: 'Researching', purpose: 'any', back: HOME }, { e: 'research' });
+        if (i.type === 'book') return to({ t: 'booking', b: i.booking, sel: 0 });
         return to({ t: 'error', msg: 'I did not catch that. Try saying: "remind me to call Sam at 5".', retry: null, sel: 0 });
       }
       case 'event': return to({ t: 'meeting', ev: input.ev });
@@ -109,6 +134,8 @@ function step(state: State, input: Input): R {
       case 'drafted': return to({ t: 'draft', d: input.d, sel: 0, items: input.items });
       case 'saved': return to({ t: 'done', title: 'Reminder set', detail: input.r.title + '\n' + input.r.whenLabel + '\nI will message you on Telegram.' });
       case 'sent': return to({ t: 'done', title: 'Sent', detail: 'Your reply to ' + input.name + ' was sent.' });
+      case 'brief': return to({ t: 'brief', title: input.b.title, pages: pages(input.b.text), page: 0 });
+      case 'bookingSaved': return to({ t: 'done', title: 'Booking saved', detail: BOOKING_KINDS[input.b.kind] + ': ' + input.b.title + '\n' + input.b.whenLabel + '\nNothing was reserved with a provider yet.' });
       default: return stay;
     }
   }
@@ -133,6 +160,8 @@ function step(state: State, input: Input): R {
       if (input.k === 'list') {
         if (input.idx === 1) return to({ t: 'busy', label: 'Checking your calendar', purpose: 'any', back: HOME }, { e: 'fetchNext' });
         if (input.idx === 2) return to({ t: 'busy', label: 'Reading your chats', purpose: 'any', back: HOME }, { e: 'fetchThreads' });
+        if (input.idx === 3) return to({ t: 'prompt', purpose: 'question' });
+        if (input.idx === 4) return to({ t: 'busy', label: 'Researching', purpose: 'any', back: HOME }, { e: 'research' });
         return to({ t: 'prompt', purpose: 'reminder' });
       }
       if (input.k === 'up') return to({ t: 'home', sel: wrap(s.sel, HOME_ITEMS.length, -1) });
@@ -190,6 +219,20 @@ function step(state: State, input: Input): R {
       }
       return stay;
 
+    case 'brief':
+      if (input.k === 'up' || input.k === 'down') return to({ ...s, page: Math.min(s.pages.length - 1, Math.max(0, s.page + (input.k === 'down' ? 1 : -1))) });
+      if (input.k === 'click' || input.k === 'double') return to(HOME);
+      return stay;
+
+    case 'booking':
+      if (input.k === 'up' || input.k === 'down') return to({ ...s, sel: wrap(s.sel, BOOKING_OPTIONS.length, input.k === 'down' ? 1 : -1) });
+      if (input.k === 'double') return to(HOME);
+      if (input.k === 'click') {
+        if (s.sel === 0) return to({ t: 'busy', label: 'Saving', purpose: 'any', back: HOME }, { e: 'saveBooking', b: s.b });
+        return to(HOME);
+      }
+      return stay;
+
     case 'meeting':
     case 'done':
       if (input.k === 'click' || input.k === 'double') return to(HOME);
@@ -218,6 +261,7 @@ export function onTranscript(state: State, text: string): R {
     const thread = items.find((x) => x.id === d.threadId);
     if (thread) return { state, effects: [{ e: 'draft', thread, instruction: clean, previous: d.text, items }] };
   }
+  if (s.purpose === 'question') return to({ t: 'busy', label: 'Thinking', purpose: 'any', back: HOME }, { e: 'ask', question: clean });
   if (s.purpose === 'editReminder' && s.back.t === 'reminder' && !/remind/i.test(clean)) {
     const bit = clean.replace(/^(please\s+)?(make it|change (it )?to|set (it )?to|actually|move it to)\s+/i, '');
     const text = /^(at\s+)?\d|^(at|in|tomorrow|tonight|today|next|on|this)\b/i.test(bit) ? 'remind me to ' + s.back.r.title + ' ' + (/^\d/.test(bit) ? 'at ' : '') + bit : 'remind me to ' + bit + ' ' + s.back.r.whenLabel;

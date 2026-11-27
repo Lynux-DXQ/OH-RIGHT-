@@ -213,6 +213,20 @@ export class Runtime {
           const d = await api.draft(e.thread.id, e.instruction, e.previous);
           return this.settle(epoch, { k: 'drafted', d, items: e.items });
         }
+        case 'ask': {
+          const brief = await api.ask(e.question);
+          return this.settle(epoch, { k: 'brief', b: { title: brief.title, text: brief.text } });
+        }
+        case 'research': {
+          const brief = await api.research();
+          return this.settle(epoch, { k: 'brief', b: { title: brief.title, text: brief.text } });
+        }
+        case 'saveBooking': {
+          const saveKey = 'booking:' + e.b.whenISO + e.b.title;
+          await api.saveBooking(e.b, this.stableId(saveKey));
+          this.ids.delete(saveKey);
+          return this.settle(epoch, { k: 'bookingSaved', b: e.b });
+        }
         case 'send': {
           const sendKey = 'send:' + e.d.threadId + e.d.text;
           const res = await api.send(e.d.threadId, e.d.text, this.stableId(sendKey));

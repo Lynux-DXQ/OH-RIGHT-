@@ -5,6 +5,9 @@ Catch it. Prep it. Send it. A voice-first daily assistant for Even Realities G2 
 - **Catch it**: say "remind me to get milk at six". The glasses show the task and time. You confirm, and a Telegram reminder is scheduled.
 - **Prep it**: say "what is next?". You get your next calendar event with a one-line prep note.
 - **Send it**: pick a Telegram chat, review a one-line summary and an AI draft, speak a change if you want one, then Send or Cancel. Nothing is sent without an explicit tap on Send.
+- **Ask it**: say or type a question and get a short answer (needs `LLM_API_KEY`). Long answers page through with scroll.
+- **Research my next meeting**: a detailed brief on the company you meet next, from live web search when `SEARCH_API_KEY` is set (Brave Search), with the open questions and talking points. Also on the phone panel.
+- **Book it**: say "book a table for two at seven at Olive & Co", "book a flight to London Friday" and so on. You confirm with Save, and a reminder is set. No provider is connected yet, so nothing is reserved with an airline, hotel, restaurant or calendar. The booking is recorded only.
 - **Bot commands and pings**: in your private chat with the bot, `/notify on` makes it message you when someone writes in a chat it can see (off by default, at most one ping per chat every 30 seconds). `/mute 60` pauses pings, `/status` shows what is on, `/reminders` lists what is pending and `/help` lists the commands.
 - **New message alerts**: while you are on the home menu, a new Telegram message shows as a short card (tap to reply, double tap to dismiss). The app checks the backend every 8 seconds, with no AI call, and an alert never interrupts a task in progress. Verified against the backend feed with live Telegram; the card itself is covered by state-machine tests, not yet by a live simulator run.
 
