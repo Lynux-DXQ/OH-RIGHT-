@@ -45,6 +45,7 @@ Copy `.env.example` to `.env` to go live:
 | `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` | Any OpenAI-compatible API for smarter intent parsing, chat summaries, drafts and prep notes. |
 | `STT_API_KEY`, `STT_BASE_URL`, `STT_MODEL` | Speech to text for the glasses microphone (OpenAI Whisper or Groq). |
 | `ICS_URL` | Secret iCal URL for your real calendar (recurring events are not expanded). |
+| `SEARCH_API_KEY` | Brave Search API key for live web results in meeting research. Without it, briefs say they come from general knowledge. |
 | `APP_TOKEN` | Shared secret the app sends with every request. Required to listen on anything other than localhost. Without it, only localhost pages can call the backend. |
 
 ## On real glasses
@@ -76,7 +77,7 @@ A free plan sleeps when idle, which stops Telegram polling and reminders, so the
 
 ## Tests
 
-`npm test` runs 123 tests: the time/intent parser, the state machine, the backend over HTTP, Telegram pairing and store recovery, the LLM paths against a fake OpenAI-compatible API, voice capture (hold to talk, tap to talk, too-short audio, silence, speech-service outage, cancel) and the runtime against a fake glasses bridge.
+`npm test` runs 131 tests: the time/intent parser, the state machine, the backend over HTTP, Telegram pairing and store recovery, the LLM paths against a fake OpenAI-compatible API, voice capture (hold to talk, tap to talk, too-short audio, silence, speech-service outage, cancel) and the runtime against a fake glasses bridge.
 
 ## Voice
 

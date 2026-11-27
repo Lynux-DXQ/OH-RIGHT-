@@ -46,7 +46,7 @@ export const api = {
   snooze: (id: string, minutes: number) => call<{ snoozed: boolean }>('/api/snooze', { id, minutes }),
   draft: (threadId: string, instruction?: string, previousDraft?: string) => call<Draft>('/api/draft', { threadId, instruction, previousDraft }),
   ask: (question: string) => call<Brief>('/api/ask', { question }),
-  research: () => call<Brief>('/api/research', {}),
+  research: () => call<Brief>('/api/research', clock()),
   saveBooking: (b: Booking, id: string) => call<{ id: string; reserved: boolean }>('/api/bookings', { ...b, id }),
   send: (threadId: string, text: string, id: string) => call<{ sent: boolean; name: string }>('/api/send', { threadId, text, id, confirmed: true }),
 };

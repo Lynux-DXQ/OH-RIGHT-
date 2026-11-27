@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { beginTyped, draftOptions, initialState, onTranscript, reduce, type Input, type State, type Effect } from '../app/src/machine';
 import { render, wrap } from '../app/src/render';
+import { pages } from '../app/src/text';
 
 const T = 1_000_000;
 const feed = (state: State, ...inputs: Input[]) => {
@@ -115,6 +116,8 @@ describe('render', () => {
       { t: 'draft', d: { threadId: 'a', name: long, summary: long, text: long }, sel: 1, items: [] },
       { t: 'meeting', ev: { title: long, whenLabel: 'Today 6:00 PM', startsInLabel: 'in 5 min', where: long, attendees: '5 people', prep: long } },
       { t: 'error', msg: long, retry: null, sel: 0 },
+      { t: 'brief', title: long, pages: pages(long), page: 0 },
+      { t: 'booking', b: { kind: 'hotel', title: long, where: long, notes: long, whenISO: '', whenLabel: long }, sel: 0 },
     ] as const;
     for (const s of screens) {
       const l = render(s as never);
@@ -228,5 +231,15 @@ describe('ask, research and book', () => {
     expect(saved.effects).toEqual([{ e: 'saveBooking', b: booking }]);
     const done = feed(saved.state, { k: 'bookingSaved', b: booking }).state;
     expect(done.screen).toMatchObject({ t: 'done', title: 'Booking saved' });
+  });
+});
+
+describe('regressions from the audit', () => {
+  it('retrying a failed booking save keeps the saving guard on', () => {
+    const b = { kind: 'flight' as const, title: 'Lagos to London', where: '', notes: '', whenISO: '2026-11-28T18:00:00.000Z', whenLabel: 'Tomorrow 7:00 PM' };
+    const failed = feed(initialState(), { k: 'fail', msg: 'Server down', retry: { e: 'saveBooking', b } });
+    const retried = feed(failed.state, { k: 'click', at: T }, { k: 'click', at: T });
+    expect(retried.state.screen).toMatchObject({ t: 'busy', label: 'Saving' });
+    expect(feed(retried.state, { k: 'double', at: T }).state.screen).toMatchObject({ t: 'busy', label: 'Saving' });
   });
 });

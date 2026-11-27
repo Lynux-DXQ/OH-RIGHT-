@@ -15,7 +15,7 @@ if (existsSync(envFile)) {
 const { store } = await import('./store.mjs');
 const { parseIntent, formatWhen } = await import('./nlu.mjs');
 const { chatJson, llmEnabled, sttEnabled, transcribe } = await import('./llm.mjs');
-const { askCompanion, researchMeeting } = await import('./assistant.mjs');
+const { askCompanion, researchMeeting, searchEnabled } = await import('./assistant.mjs');
 const { nextEvent } = await import('./calendar.mjs');
 const { demoThreads, summarise, draftReply } = await import('./replies.mjs');
 const { telegramEnabled, recentThreads, markRead, sendTelegram, startPolling } = await import('./telegram.mjs');
@@ -114,7 +114,9 @@ const routes = {
     const body = await readJson(req);
     const { now, offsetMin } = clientTime(body);
     const text = String(body.text || '').slice(0, 400);
-    let intent = /^\s*(research|brief me)\b/i.test(text) ? { type: 'research' } : parseIntent(text, { now, offsetMin });
+    let intent = parseIntent(text, { now, offsetMin });
+    if (/^\s*(research|brief me)\b/i.test(text)) intent = { type: 'research' };
+    else if (/^\s*(book|reserve)\b/i.test(text)) intent = { type: 'unknown' };
     if (intent.type === 'unknown' && text.trim() && llmEnabled()) {
       try { intent = (await llmIntent(text, now, offsetMin)) || intent; } catch (err) { console.error('[llm intent]', err.message); }
     }
@@ -133,7 +135,7 @@ const routes = {
     const whenISO = Date.parse(body.whenISO);
     const title = String(body.title || '').trim().slice(0, 120);
     if (!title || !Number.isFinite(whenISO)) throw new HttpError(400, 'title and whenISO are required');
-    const id = String(body.id || randomUUID());
+    const id = String(body.id || randomUUID()).slice(0, 64);
     const existing = store.data.bookings.find((b) => b.id === id);
     if (existing) return { id, reserved: false, duplicate: true };
     const booking = { id, kind, title, where: String(body.where || '').slice(0, 120), notes: String(body.notes || '').slice(0, 300), whenISO: new Date(whenISO).toISOString() };
@@ -157,7 +159,7 @@ const routes = {
     if (!event) return { title: 'Meeting brief', text: 'Nothing else on your calendar, so there is no meeting to research.' };
     if (!llmEnabled()) return { title: 'Brief: ' + event.title, text: 'Meeting: ' + event.title + '\n' + event.whenLabel + (event.where ? '\nWhere: ' + event.where : '') + '\n' + event.prep + '\n\nFull research needs an AI key on the server (LLM_API_KEY).' };
     const brief = await researchMeeting(event);
-    const caveat = brief.live ? '' : '\n\nNo live web search is set up (SEARCH_API_KEY), so this is from general knowledge. Check the facts before you rely on them.';
+    const caveat = brief.live ? '' : '\n\n' + (searchEnabled() ? 'Live search found no sources for this, so' : 'No live web search is set up (SEARCH_API_KEY), so') + ' this is from general knowledge. Check the facts before you rely on them.';
     return { title: brief.title, text: brief.text + caveat, sources: brief.sources };
   },
 
@@ -270,7 +272,7 @@ const server = createServer(async (req, res) => {
   } catch (err) {
     const status = err instanceof HttpError ? err.status : 502;
     if (!(err instanceof HttpError)) console.error('[' + path + ']', err);
-    send(status, { error: err instanceof HttpError ? err.message : 'Upstream service failed: ' + err.message });
+    send(status, { error: err instanceof HttpError ? err.message : 'Upstream service failed. Try again in a moment.' });
   }
 });
 

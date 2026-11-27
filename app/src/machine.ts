@@ -73,6 +73,7 @@ const REMINDER_INTERRUPTIBLE = ['home', 'done', 'meeting', 'error', 'prompt'];
 export const SNOOZE_MINUTES = 10;
 export const REMINDER_OPTIONS = ['Save', 'Change', 'Cancel'];
 export const BOOKING_OPTIONS = ['Save', 'Cancel'];
+const RETRY_LABEL: Partial<Record<Effect['e'], string>> = { save: 'Scheduling', saveBooking: 'Saving', send: 'Sending' };
 export const BOOKING_KINDS: Record<BookingKind, string> = { meeting: 'Meeting', appointment: 'Appointment', flight: 'Flight', hotel: 'Hotel', restaurant: 'Restaurant table' };
 export const draftOptions = (d: Draft) => (d.alts?.length ? ['Send', 'Change', 'Other reply', 'Cancel'] : ['Send', 'Change', 'Cancel']);
 
@@ -243,7 +244,7 @@ function step(state: State, input: Input): R {
       if (input.k === 'double') return to(HOME);
       if (input.k === 'click') {
         if (s.sel === 1) return to(HOME);
-        if (s.retry) return to({ t: 'busy', label: 'Trying again', purpose: 'any', back: HOME }, s.retry);
+        if (s.retry) return to({ t: 'busy', label: RETRY_LABEL[s.retry.e] ?? 'Trying again', purpose: 'any', back: HOME }, s.retry);
         return to({ t: 'prompt', purpose: 'any' });
       }
       return stay;

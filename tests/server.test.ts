@@ -198,6 +198,11 @@ describe('assistant in demo mode', () => {
     expect((await post('/api/bookings', { ...body, id: 'x', kind: 'spaceship' })).status).toBe(400);
   });
 
+  it('sends booking requests to the model instead of saving them as reminders', async () => {
+    const parsed = await (await post('/api/parse', { text: 'book a table for two at seven at Olive and Co', now: Date.now(), offsetMin: 0 })).json();
+    expect(parsed.intent.type).toBe('unknown');
+  });
+
   it('questions need an AI key and say so', async () => {
     const res = await post('/api/ask', { question: 'What is 2 plus 2?' });
     expect(res.status).toBe(501);
